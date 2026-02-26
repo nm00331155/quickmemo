@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">QuickMemo</string>
+    <string name="home_title">QuickMemo</string>
+    <string name="search_hint">メモを検索</string>
+    <string name="settings">設定</string>
+    <string name="all_memos">すべてのメモ</string>
+    <string name="pinned">ピン留め</string>
+    <string name="new_memo">新規メモ</string>
+    <string name="title_optional">タイトル（任意）</string>
+    <string name="memo_placeholder">メモを入力...</string>
+    <string name="locked_memo">ロックされたメモ</string>
+    <string name="move_to_trash">ゴミ箱へ移動</string>
+    <string name="undo">元に戻す</string>
+    <string name="trash">ゴミ箱</string>
+    <string name="empty_trash">すべて空にする</string>
+    <string name="restore">復元</string>
+    <string name="delete_permanently">完全に削除</string>
+    <string name="ad_remove_title">✨ 広告を非表示にする</string>
+    <string name="ad_remove_price">¥300の買い切り</string>
+    <string name="purchase">購入する</string>
+    <string name="purchased">✓ 購入済み</string>
+    <string name="quick_input_notification_title">QuickMemo</string>
+    <string name="quick_input_notification_text">タップして新しいメモを作成</string>
+    <string name="quick_new_memo">新規メモ</string>
+    <string name="quick_checklist">チェックリスト</string>
+    <string name="ai_assistant">✨ AIアシスタント</string>
+</resources>
