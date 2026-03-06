@@ -11,9 +11,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,16 +23,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Settings
@@ -51,7 +43,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -74,7 +65,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -89,13 +79,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
-import com.quickmemo.app.ai.AiFeatureStatus
 import com.quickmemo.app.domain.model.MemoBlock
 import com.quickmemo.app.domain.model.createDefaultMemoBlocks
 import com.quickmemo.app.domain.model.decodeMemoBlocks
 import com.quickmemo.app.domain.model.encodeMemoBlocks
 import com.quickmemo.app.domain.model.memoBlocksToPlainText
-import com.quickmemo.app.domain.model.withUpdatedCell
+import com.quickmemo.app.domain.model.plainTextToHtml
 import com.quickmemo.app.ocr.OcrProcessor
 import com.quickmemo.app.ocr.OcrResult
 import com.quickmemo.app.translation.TranslationManager
@@ -103,6 +92,8 @@ import com.quickmemo.app.translation.TranslationResult
 import com.quickmemo.app.util.DateTimeUtils
 import com.quickmemo.app.util.memoCardBackgroundColor
 import java.io.File
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Calendar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -136,12 +127,10 @@ fun EditorScreen(
     var undoSnapshotRaw by remember { mutableStateOf("") }
     var isApplyingSnapshot by remember { mutableStateOf(false) }
 
-    var showNumberedListDialog by remember { mutableStateOf(false) }
-    var numberedListCount by remember { mutableStateOf(5) }
-
-    var showTableDialog by remember { mutableStateOf(false) }
-    var tableRows by remember { mutableStateOf(3) }
-    var tableCols by remember { mutableStateOf(3) }
+    var showCalculatorDialog by remember { mutableStateOf(false) }
+    var calculatorExpression by remember { mutableStateOf("") }
+    var calculatorResult by remember { mutableStateOf("") }
+    var calculatorError by remember { mutableStateOf<String?>(null) }
 
     var showOcrSourceSheet by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -169,21 +158,42 @@ fun EditorScreen(
         return null
     }
 
-    fun resolveCurrentBlocks(): List<MemoBlock> {
-        return memoBlocks.map { block ->
-            when (block) {
-                is MemoBlock.RichTextBlock -> {
-                    val latestHtml = richTextStates[block.id]?.toHtml() ?: block.html
-                    block.copy(html = latestHtml)
-                }
+    fun convertLegacyTableBlock(block: MemoBlock.TableBlock): MemoBlock.RichTextBlock {
+        val plainText = block.cells
+            .joinToString(separator = "\n") { row ->
+                row.joinToString(separator = "\t").trimEnd()
+            }
+            .trim()
+        return MemoBlock.RichTextBlock(html = plainTextToHtml(plainText))
+    }
 
-                is MemoBlock.TableBlock -> block
+    fun normalizeDeprecatedBlocks(blocks: List<MemoBlock>): List<MemoBlock> {
+        val normalized = blocks.map { block ->
+            when (block) {
+                is MemoBlock.RichTextBlock -> block
+                is MemoBlock.TableBlock -> convertLegacyTableBlock(block)
             }
         }
+        return ensureAtLeastOneRichBlock(normalized)
+    }
+
+    fun resolveCurrentBlocks(): List<MemoBlock> {
+        return normalizeDeprecatedBlocks(
+            memoBlocks.map { block ->
+                when (block) {
+                    is MemoBlock.RichTextBlock -> {
+                        val latestHtml = richTextStates[block.id]?.toHtml() ?: block.html
+                        block.copy(html = latestHtml)
+                    }
+
+                    is MemoBlock.TableBlock -> block
+                }
+            },
+        )
     }
 
     fun updateBlocks(nextBlocks: List<MemoBlock>, recordHistory: Boolean = true) {
-        val ensured = ensureAtLeastOneRichBlock(nextBlocks)
+        val ensured = normalizeDeprecatedBlocks(nextBlocks)
         memoBlocks = ensured
         currentPlainText = memoBlocksToPlainText(ensured)
         if (activeRichBlockId == null || ensured.none { it.id == activeRichBlockId }) {
@@ -243,7 +253,7 @@ fun EditorScreen(
     }
 
     fun applyUndoRedoSnapshot(snapshot: String) {
-        val restored = ensureAtLeastOneRichBlock(
+        val restored = normalizeDeprecatedBlocks(
             decodeMemoBlocks(blocksJson = snapshot, fallbackHtml = ""),
         )
         isApplyingSnapshot = true
@@ -252,7 +262,7 @@ fun EditorScreen(
         memoBlocks = restored
         currentPlainText = memoBlocksToPlainText(restored)
         activeRichBlockId = restored.firstOrNull { it is MemoBlock.RichTextBlock }?.id
-        undoSnapshotRaw = snapshot
+        undoSnapshotRaw = encodeMemoBlocks(restored)
         scope.launch {
             delay(120)
             viewModel.setUndoRedoRestoring(false)
@@ -280,54 +290,25 @@ fun EditorScreen(
         applyUndoRedoSnapshot(snapshot)
     }
 
-    fun insertNumberedList(itemCount: Int) {
-        val targetState = activeRichTextState() ?: return
-        val safeCount = itemCount.coerceIn(1, 20)
-        val markdown = (1..safeCount).joinToString(separator = "\n") { "$it. " }
-        targetState.insertMarkdownAfterSelection("\n$markdown")
-    }
-
-    fun insertTableBlock(rowCount: Int, columnCount: Int) {
-        val safeRows = rowCount.coerceIn(1, 10)
-        val safeColumns = columnCount.coerceIn(1, 10)
-        val newTable = MemoBlock.TableBlock(
-            rows = safeRows,
-            cols = safeColumns,
-            cells = List(safeRows) { List(safeColumns) { "" } },
-        )
-
-        val current = resolveCurrentBlocks().toMutableList()
-        val anchorIndex = current.indexOfFirst {
-            it is MemoBlock.RichTextBlock && it.id == activeRichBlockId
+    fun evaluateCalculatorExpression(): Boolean {
+        val source = calculatorExpression.trim()
+        if (source.isBlank()) {
+            calculatorError = "式を入力してください"
+            calculatorResult = ""
+            return false
         }
-        val insertIndex = if (anchorIndex >= 0) anchorIndex + 1 else current.size
-        current.add(insertIndex, newTable)
-        updateBlocks(current)
-    }
 
-    fun deleteTableBlock(tableBlockId: String) {
-        val current = resolveCurrentBlocks().toMutableList()
-        val index = current.indexOfFirst {
-            it is MemoBlock.TableBlock && it.id == tableBlockId
-        }
-        if (index < 0) return
-
-        val deleted = current[index] as MemoBlock.TableBlock
-        current.removeAt(index)
-        updateBlocks(current)
-
-        scope.launch {
-            val result = snackbarHostState.showSnackbar(
-                message = "表を削除しました",
-                actionLabel = "元に戻す",
+        return runCatching {
+            formatCalculatorResult(
+                parseCalculatorExpression(source),
             )
-            if (result == SnackbarResult.ActionPerformed) {
-                val restored = resolveCurrentBlocks().toMutableList()
-                val restoreIndex = index.coerceIn(0, restored.size)
-                restored.add(restoreIndex, deleted)
-                updateBlocks(restored)
-            }
-        }
+        }.onSuccess { result ->
+            calculatorResult = result
+            calculatorError = null
+        }.onFailure { throwable ->
+            calculatorResult = ""
+            calculatorError = throwable.message ?: "計算に失敗しました"
+        }.isSuccess
     }
 
     suspend fun ensureTranslationReady(): Boolean {
@@ -474,7 +455,7 @@ fun EditorScreen(
         isApplyingSnapshot = true
         richTextStates.clear()
 
-        val initialBlocks = ensureAtLeastOneRichBlock(
+        val initialBlocks = normalizeDeprecatedBlocks(
             if (uiState.initialBlocks.isEmpty()) {
                 createDefaultMemoBlocks(uiState.initialContentHtml)
             } else {
@@ -599,34 +580,8 @@ fun EditorScreen(
                             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                         }
                     },
-                    onInsertNumberedList = {
-                        numberedListCount = 5
-                        showNumberedListDialog = true
-                    },
-                    onInsertTable = {
-                        tableRows = 3
-                        tableCols = 3
-                        showTableDialog = true
-                    },
                     onOpenCalculator = {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("電卓結果は日付/時刻と同様に追記できます")
-                        }
-                    },
-                    onOpenAi = {
-                        if (uiState.aiFeatureStatus == AiFeatureStatus.UNAVAILABLE) {
-                            scope.launch {
-                                snackbarHostState.showSnackbar("この端末ではAI機能を利用できません")
-                            }
-                        } else {
-                            scope.launch {
-                                if (viewModel.canUseAiFeature()) {
-                                    viewModel.openAiSheet()
-                                } else {
-                                    snackbarHostState.showSnackbar("AI無料枠（5回/月）を使い切りました")
-                                }
-                            }
-                        }
+                        showCalculatorDialog = true
                     },
                     onOpenTranslation = {
                         runTranslationFlow(
@@ -653,10 +608,7 @@ fun EditorScreen(
                     showFullCopy = uiState.memoToolbarSettings.fullCopy,
                     showUndoRedo = uiState.memoToolbarSettings.undoRedo,
                     showOcr = uiState.memoToolbarSettings.ocr,
-                    showNumberedList = uiState.memoToolbarSettings.numberedList,
-                    showTable = uiState.memoToolbarSettings.table,
                     showCalculator = uiState.memoToolbarSettings.calculator,
-                    showAi = uiState.memoToolbarSettings.ai,
                     showTranslation = uiState.memoToolbarSettings.translation,
                     showDateTimeInsert = uiState.memoToolbarSettings.dateTimeInsert,
                     canUndo = uiState.canUndo,
@@ -774,25 +726,7 @@ fun EditorScreen(
                                 )
                             }
 
-                            is MemoBlock.TableBlock -> {
-                                MemoTableBlock(
-                                    block = block,
-                                    onCellChange = { rowIndex, colIndex, text ->
-                                        val updated = memoBlocks.map { existing ->
-                                            if (existing is MemoBlock.TableBlock && existing.id == block.id) {
-                                                existing.withUpdatedCell(rowIndex, colIndex, text)
-                                            } else {
-                                                existing
-                                            }
-                                        }
-                                        updateBlocks(updated)
-                                    },
-                                    onDeleteTable = {
-                                        deleteTableBlock(block.id)
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
+                            is MemoBlock.TableBlock -> Unit
                         }
                     }
                 }
@@ -877,103 +811,67 @@ fun EditorScreen(
         }
     }
 
-    if (showNumberedListDialog) {
+    if (showCalculatorDialog) {
         AlertDialog(
-            onDismissRequest = { showNumberedListDialog = false },
-            title = { Text("番号付きリスト") },
-            text = {
-                StepperRow(
-                    label = "項目数",
-                    value = numberedListCount,
-                    onDecrement = { numberedListCount = (numberedListCount - 1).coerceAtLeast(1) },
-                    onIncrement = { numberedListCount = (numberedListCount + 1).coerceAtMost(20) },
-                )
+            onDismissRequest = {
+                showCalculatorDialog = false
+                calculatorError = null
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        insertNumberedList(numberedListCount)
-                        showNumberedListDialog = false
-                    },
-                ) {
-                    Text("作成")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNumberedListDialog = false }) {
-                    Text("キャンセル")
-                }
-            },
-        )
-    }
-
-    if (showTableDialog) {
-        AlertDialog(
-            onDismissRequest = { showTableDialog = false },
-            title = { Text("表の作成") },
+            title = { Text("電卓") },
             text = {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    StepperRow(
-                        label = "行数",
-                        value = tableRows,
-                        onDecrement = { tableRows = (tableRows - 1).coerceAtLeast(1) },
-                        onIncrement = { tableRows = (tableRows + 1).coerceAtMost(10) },
+                    OutlinedTextField(
+                        value = calculatorExpression,
+                        onValueChange = {
+                            calculatorExpression = it
+                            calculatorError = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("式") },
+                        placeholder = { Text("例: (1200+300)*0.1") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Ascii,
+                            imeAction = ImeAction.Done,
+                        ),
                     )
-                    StepperRow(
-                        label = "列数",
-                        value = tableCols,
-                        onDecrement = { tableCols = (tableCols - 1).coerceAtLeast(1) },
-                        onIncrement = { tableCols = (tableCols + 1).coerceAtMost(10) },
-                    )
+
+                    if (calculatorResult.isNotBlank()) {
+                        Text("結果: $calculatorResult")
+                    }
+
+                    val error = calculatorError
+                    if (!error.isNullOrBlank()) {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        insertTableBlock(tableRows, tableCols)
-                        showTableDialog = false
-                    },
-                ) {
-                    Text("作成")
+                Row {
+                    TextButton(onClick = { evaluateCalculatorExpression() }) {
+                        Text("計算")
+                    }
+                    TextButton(
+                        onClick = {
+                            if (evaluateCalculatorExpression()) {
+                                appendTextToEditor(calculatorResult)
+                                showCalculatorDialog = false
+                            }
+                        },
+                    ) {
+                        Text("挿入")
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showTableDialog = false }) {
-                    Text("キャンセル")
+                TextButton(onClick = { showCalculatorDialog = false }) {
+                    Text("閉じる")
                 }
-            },
-        )
-    }
-
-    if (uiState.showAiSheet) {
-        AiBottomSheet(
-            uiState = uiState,
-            onSummarizeClick = {
-                scope.launch {
-                    if (viewModel.canUseAiFeature()) {
-                        viewModel.summarizeWithAi(currentPlainText)
-                    } else {
-                        snackbarHostState.showSnackbar("AI無料枠（5回/月）を使い切りました")
-                    }
-                }
-            },
-            onSuggestTagsClick = {
-                scope.launch {
-                    if (viewModel.canUseAiFeature()) {
-                        viewModel.suggestTagsWithAi(currentPlainText)
-                    } else {
-                        snackbarHostState.showSnackbar("AI無料枠（5回/月）を使い切りました")
-                    }
-                }
-            },
-            onAppendToMemo = {
-                appendTextToEditor(uiState.aiResultText)
-                viewModel.closeAiSheet()
-            },
-            onDismissRequest = {
-                viewModel.closeAiSheet()
             },
         )
     }
@@ -1003,32 +901,6 @@ fun EditorScreen(
             },
             dismissButton = {
                 Row {
-                    TextButton(
-                        enabled = uiState.aiFeatureStatus != AiFeatureStatus.UNAVAILABLE,
-                        onClick = {
-                            scope.launch {
-                                if (!viewModel.canUseAiFeature()) {
-                                    snackbarHostState.showSnackbar("AI無料枠（5回/月）を使い切りました")
-                                    return@launch
-                                }
-                                isOcrLoading = true
-                                val polished = runCatching {
-                                    viewModel.polishTextWithAi(ocrResultText)
-                                }.getOrElse {
-                                    snackbarHostState.showSnackbar("AI整形に失敗しました")
-                                    ""
-                                }
-                                isOcrLoading = false
-                                if (polished.isNotBlank()) {
-                                    appendTextToEditor(polished)
-                                    showOcrResultDialog = false
-                                }
-                            }
-                        },
-                    ) {
-                        Text("AI整形して挿入")
-                    }
-
                     TextButton(
                         onClick = {
                             if (!uiState.hasTranslation) {
@@ -1111,120 +983,119 @@ fun EditorScreen(
     }
 }
 
-@Composable
-private fun StepperRow(
-    label: String,
-    value: Int,
-    onDecrement: () -> Unit,
-    onIncrement: () -> Unit,
+private fun parseCalculatorExpression(source: String): BigDecimal {
+    return CalculatorExpressionParser(source).parse()
+}
+
+private fun formatCalculatorResult(value: BigDecimal): String {
+    return value.stripTrailingZeros().toPlainString()
+}
+
+private class CalculatorExpressionParser(
+    private val source: String,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "$label:")
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onDecrement) {
-                Text("-")
-            }
-            Text(
-                text = value.toString(),
-                modifier = Modifier.padding(horizontal = 6.dp),
-            )
-            TextButton(onClick = onIncrement) {
-                Text("+")
+    private var index: Int = 0
+
+    fun parse(): BigDecimal {
+        val value = parseExpression()
+        skipWhitespace()
+        if (index != source.length) {
+            throw IllegalArgumentException("式に無効な文字があります")
+        }
+        return value
+    }
+
+    private fun parseExpression(): BigDecimal {
+        var value = parseTerm()
+        while (true) {
+            skipWhitespace()
+            value = when {
+                consume('+') -> value.add(parseTerm())
+                consume('-') -> value.subtract(parseTerm())
+                else -> return value
             }
         }
     }
-}
 
-@Composable
-private fun MemoTableBlock(
-    block: MemoBlock.TableBlock,
-    onCellChange: (row: Int, col: Int, text: String) -> Unit,
-    onDeleteTable: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val horizontalScroll = block.cols >= 4
+    private fun parseTerm(): BigDecimal {
+        var value = parseFactor()
+        while (true) {
+            skipWhitespace()
+            value = when {
+                consume('*') -> value.multiply(parseFactor())
+                consume('/') -> {
+                    val divisor = parseFactor()
+                    if (divisor.compareTo(BigDecimal.ZERO) == 0) {
+                        throw IllegalArgumentException("0で割ることはできません")
+                    }
+                    value.divide(divisor, 12, RoundingMode.HALF_UP).stripTrailingZeros()
+                }
 
-    Column(
-        modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(4.dp),
-            )
-            .padding(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            IconButton(onClick = onDeleteTable) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "delete_table",
-                )
+                else -> return value
+            }
+        }
+    }
+
+    private fun parseFactor(): BigDecimal {
+        skipWhitespace()
+        return when {
+            consume('+') -> parseFactor()
+            consume('-') -> parseFactor().negate()
+            consume('(') -> {
+                val value = parseExpression()
+                skipWhitespace()
+                if (!consume(')')) {
+                    throw IllegalArgumentException("閉じ括弧 ')' が不足しています")
+                }
+                value
+            }
+
+            else -> parseNumber()
+        }
+    }
+
+    private fun parseNumber(): BigDecimal {
+        skipWhitespace()
+        val start = index
+        var hasDot = false
+
+        while (index < source.length) {
+            val current = source[index]
+            when {
+                current.isDigit() -> index += 1
+                current == '.' && !hasDot -> {
+                    hasDot = true
+                    index += 1
+                }
+
+                else -> break
             }
         }
 
-        Column(
-            modifier = if (horizontalScroll) {
-                Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth()
-            } else {
-                Modifier.fillMaxWidth()
-            },
-        ) {
-            block.cells.forEachIndexed { rowIndex, row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    row.forEachIndexed { colIndex, cellText ->
-                        val cellModifier = if (horizontalScroll) {
-                            Modifier.width(160.dp)
-                        } else {
-                            Modifier.weight(1f)
-                        }
+        if (start == index) {
+            throw IllegalArgumentException("数値の形式が不正です")
+        }
 
-                        Box(
-                            modifier = cellModifier
-                                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
-                                .padding(8.dp)
-                                .defaultMinSize(minHeight = 32.dp),
-                        ) {
-                            BasicTextField(
-                                value = cellText,
-                                onValueChange = {
-                                    onCellChange(rowIndex, colIndex, it)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = TextStyle(
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                ),
-                                decorationBox = { innerTextField ->
-                                    if (cellText.isEmpty()) {
-                                        Text(
-                                            text = "...",
-                                            style = TextStyle(
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                            ),
-                                        )
-                                    }
-                                    innerTextField()
-                                },
-                            )
-                        }
-                    }
-                }
-            }
+        val token = source.substring(start, index)
+        if (token == ".") {
+            throw IllegalArgumentException("数値の形式が不正です")
+        }
+
+        return token.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("数値の形式が不正です")
+    }
+
+    private fun consume(expected: Char): Boolean {
+        if (index < source.length && source[index] == expected) {
+            index += 1
+            return true
+        }
+        return false
+    }
+
+    private fun skipWhitespace() {
+        while (index < source.length && source[index].isWhitespace()) {
+            index += 1
         }
     }
 }

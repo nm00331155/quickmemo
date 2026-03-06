@@ -20,7 +20,6 @@ interface SettingsRepository {
     suspend fun setTodoReminderOneDay(enabled: Boolean)
     suspend fun setTodoReminderThreeDays(enabled: Boolean)
     suspend fun setTodoReminderOneWeek(enabled: Boolean)
-    suspend fun setAiPolishPreview(enabled: Boolean)
     suspend fun setRequireAuthOnLaunch(enabled: Boolean)
     suspend fun setRemoveAdsPurchased(purchased: Boolean)
     suspend fun setLastBackupDateTime(value: String?)

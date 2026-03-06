@@ -32,7 +32,7 @@ class QuickMemoForegroundService : Service() {
                 PendingIntent.getActivity(
                     this,
                     100,
-                    buildEditorIntent(checklist = false),
+                    buildEditorIntent(),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
             )
@@ -42,17 +42,7 @@ class QuickMemoForegroundService : Service() {
                 PendingIntent.getActivity(
                     this,
                     101,
-                    buildEditorIntent(checklist = false),
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                ),
-            )
-            .addAction(
-                0,
-                getString(R.string.quick_checklist),
-                PendingIntent.getActivity(
-                    this,
-                    102,
-                    buildEditorIntent(checklist = true),
+                    buildEditorIntent(),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 ),
             )
@@ -73,10 +63,9 @@ class QuickMemoForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun buildEditorIntent(checklist: Boolean): Intent {
+    private fun buildEditorIntent(): Intent {
         return Intent(this, MainActivity::class.java).apply {
             action = QuickMemoIntents.ACTION_OPEN_EDITOR
-            putExtra(QuickMemoIntents.EXTRA_IS_CHECKLIST, checklist)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
     }

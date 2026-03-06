@@ -1,17 +1,9 @@
 package com.quickmemo.app.presentation.settings
 
 import android.app.Activity
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.quickmemo.app.BuildConfig
-import com.quickmemo.app.ai.AiEngineManager
-import com.quickmemo.app.ai.AiEngineType
-import com.quickmemo.app.ai.ModelDownloadWorker
-import com.quickmemo.app.ai.ModelManager
 import com.quickmemo.app.billing.BillingManager
 import com.quickmemo.app.data.local.database.QuickMemoDatabase
 import com.quickmemo.app.data.local.entity.MemoEntity
@@ -21,7 +13,6 @@ import com.quickmemo.app.domain.model.MemoToolbarFeature
 import com.quickmemo.app.domain.model.ThemeMode
 import com.quickmemo.app.domain.repository.SettingsRepository
 import com.quickmemo.app.domain.repository.TodoRepository
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -30,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,13 +30,10 @@ import org.json.JSONObject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
     private val billingManager: BillingManager,
     private val todoRepository: TodoRepository,
     private val database: QuickMemoDatabase,
-    private val aiEngineManager: AiEngineManager,
-    private val modelManager: ModelManager,
 ) : ViewModel() {
 
     private val baseSettingsFlow = combine(
@@ -55,28 +44,12 @@ class SettingsViewModel @Inject constructor(
         Triple(settings, billing, tabNames)
     }
 
-    private val aiStateFlow = combine(
-        aiEngineManager.observePreferences(),
-        modelManager.status,
-        modelManager.progress,
-    ) { aiPreferences, modelStatus, modelProgress ->
-        Triple(aiPreferences, modelStatus, modelProgress)
-    }
-
-    val uiState: StateFlow<SettingsUiState> = combine(
-        baseSettingsFlow,
-        aiStateFlow,
-    ) { base, ai ->
-        val (settings, billing, tabNames) = base
-        val (aiPreferences, modelStatus, modelProgress) = ai
+    val uiState: StateFlow<SettingsUiState> = baseSettingsFlow.map { (settings, billing, tabNames) ->
         SettingsUiState(
             settings = settings,
             billingState = billing,
             appVersion = BuildConfig.VERSION_NAME,
             todoTabNames = tabNames,
-            aiEnginePreferences = aiPreferences,
-            aiModelStatus = modelStatus,
-            aiModelProgress = modelProgress,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -132,10 +105,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setRequireAuthOnLaunch(enabled) }
     }
 
-    fun setAiPolishPreview(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setAiPolishPreview(enabled) }
-    }
-
     fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setMemoToolbarFeature(feature, enabled) }
     }
@@ -152,7 +121,6 @@ class SettingsViewModel @Inject constructor(
         val todos = database.todoDao().getAllForBackup()
         val settings = uiState.value.settings
         val tabNames = uiState.value.todoTabNames
-        val aiPreferences = uiState.value.aiEnginePreferences
 
         val json = JSONObject().apply {
             put("version", 1)
@@ -175,7 +143,6 @@ class SettingsViewModel @Inject constructor(
             )
             put("todo_tab_names", JSONArray(tabNames))
             put("settings", settings.toBackupJson())
-            put("ai_preferences", aiPreferences.toBackupJson())
         }
 
         json.toString(2)
@@ -189,7 +156,6 @@ class SettingsViewModel @Inject constructor(
             val todoArray = root.optJSONArray("todo_items") ?: JSONArray()
             val tabNames = root.optJSONArray("todo_tab_names") ?: JSONArray()
             val settingsObject = root.optJSONObject("settings") ?: JSONObject()
-            val aiPreferencesObject = root.optJSONObject("ai_preferences") ?: JSONObject()
 
             val restoredMemos = mutableListOf<MemoEntity>()
             for (i in 0 until memoArray.length()) {
@@ -211,7 +177,6 @@ class SettingsViewModel @Inject constructor(
             }
 
             applySettingsFromBackup(settingsObject)
-            applyAiPreferencesFromBackup(aiPreferencesObject)
 
             for (index in 0 until 3) {
                 val name = tabNames.optString(index).trim()
@@ -219,34 +184,6 @@ class SettingsViewModel @Inject constructor(
                     todoRepository.setTabName(index, name)
                 }
             }
-        }
-    }
-
-    private suspend fun applyAiPreferencesFromBackup(aiPreferencesObject: JSONObject) {
-        if (aiPreferencesObject.length() == 0) return
-
-        val selectedEngine = runCatching {
-            AiEngineType.valueOf(
-                aiPreferencesObject.optString("selected_engine", AiEngineType.QWEN3_LOCAL.name),
-            )
-        }.getOrDefault(AiEngineType.QWEN3_LOCAL)
-
-        aiEngineManager.setSelectedEngine(selectedEngine)
-
-        if (aiPreferencesObject.has("openai_api_key")) {
-            aiEngineManager.setOpenAiApiKey(aiPreferencesObject.optString("openai_api_key", ""))
-        }
-        if (aiPreferencesObject.has("openai_model")) {
-            aiEngineManager.setOpenAiModel(aiPreferencesObject.optString("openai_model", "gpt-4o-mini"))
-        }
-        if (aiPreferencesObject.has("custom_api_endpoint")) {
-            aiEngineManager.setCustomApiEndpoint(aiPreferencesObject.optString("custom_api_endpoint", ""))
-        }
-        if (aiPreferencesObject.has("custom_api_key")) {
-            aiEngineManager.setCustomApiKey(aiPreferencesObject.optString("custom_api_key", ""))
-        }
-        if (aiPreferencesObject.has("custom_api_model")) {
-            aiEngineManager.setCustomApiModel(aiPreferencesObject.optString("custom_api_model", "default"))
         }
     }
 
@@ -263,55 +200,6 @@ class SettingsViewModel @Inject constructor(
 
     fun purchaseRemoveAds(activity: Activity) {
         billingManager.launchPurchase(activity)
-    }
-
-    fun setSelectedAiEngine(type: AiEngineType) {
-        viewModelScope.launch {
-            aiEngineManager.setSelectedEngine(type)
-        }
-    }
-
-    fun setOpenAiApiKey(value: String) {
-        viewModelScope.launch {
-            aiEngineManager.setOpenAiApiKey(value)
-        }
-    }
-
-    fun setOpenAiModel(value: String) {
-        viewModelScope.launch {
-            aiEngineManager.setOpenAiModel(value)
-        }
-    }
-
-    fun setCustomApiEndpoint(value: String) {
-        viewModelScope.launch {
-            aiEngineManager.setCustomApiEndpoint(value)
-        }
-    }
-
-    fun setCustomApiKey(value: String) {
-        viewModelScope.launch {
-            aiEngineManager.setCustomApiKey(value)
-        }
-    }
-
-    fun setCustomApiModel(value: String) {
-        viewModelScope.launch {
-            aiEngineManager.setCustomApiModel(value)
-        }
-    }
-
-    fun startAiModelDownload() {
-        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>().build()
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "ai_model_download",
-            ExistingWorkPolicy.REPLACE,
-            request,
-        )
-    }
-
-    fun deleteAiModel() {
-        modelManager.deleteModel()
     }
 
     fun refreshPurchases() {
@@ -341,9 +229,6 @@ class SettingsViewModel @Inject constructor(
         )
         settingsRepository.setInsertCurrentTimeWithDate(
             settingsObject.optBoolean("date_include_time", false),
-        )
-        settingsRepository.setAiPolishPreview(
-            settingsObject.optBoolean("ai_polish_preview", true),
         )
 
         settingsRepository.setTodoReminderEnabled(
@@ -382,14 +267,6 @@ class SettingsViewModel @Inject constructor(
             settingsObject.optBoolean("memo_toolbar_text_size", true),
         )
         settingsRepository.setMemoToolbarFeature(
-            MemoToolbarFeature.NUMBERED_LIST,
-            settingsObject.optBoolean("memo_toolbar_numbered_list", true),
-        )
-        settingsRepository.setMemoToolbarFeature(
-            MemoToolbarFeature.TABLE,
-            settingsObject.optBoolean("memo_toolbar_table", true),
-        )
-        settingsRepository.setMemoToolbarFeature(
             MemoToolbarFeature.UNDO_REDO,
             settingsObject.optBoolean("memo_toolbar_undo_redo", true),
         )
@@ -400,10 +277,6 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setMemoToolbarFeature(
             MemoToolbarFeature.CALCULATOR,
             settingsObject.optBoolean("memo_toolbar_calculator", true),
-        )
-        settingsRepository.setMemoToolbarFeature(
-            MemoToolbarFeature.AI,
-            settingsObject.optBoolean("memo_toolbar_ai", true),
         )
         settingsRepository.setMemoToolbarFeature(
             MemoToolbarFeature.TRANSLATION,
@@ -510,7 +383,6 @@ private fun com.quickmemo.app.domain.model.AppSettings.toBackupJson(): JSONObjec
         put("default_memo_color", defaultMemoColor)
         put("show_char_count", showCharacterCount)
         put("date_include_time", insertCurrentTimeWithDate)
-        put("ai_polish_preview", aiPolishPreview)
         put("todo_reminder_enabled", todoReminderEnabled)
         if (reminderSettings.customHoursBefore == null) {
             put("todo_reminder_custom_hours", JSONObject.NULL)
@@ -525,26 +397,12 @@ private fun com.quickmemo.app.domain.model.AppSettings.toBackupJson(): JSONObjec
         put("memo_toolbar_text_color", memoToolbarSettings.textColor)
         put("memo_toolbar_highlighter", memoToolbarSettings.highlighter)
         put("memo_toolbar_text_size", memoToolbarSettings.textSize)
-        put("memo_toolbar_numbered_list", memoToolbarSettings.numberedList)
-        put("memo_toolbar_table", memoToolbarSettings.table)
         put("memo_toolbar_undo_redo", memoToolbarSettings.undoRedo)
         put("memo_toolbar_datetime_insert", memoToolbarSettings.dateTimeInsert)
         put("memo_toolbar_calculator", memoToolbarSettings.calculator)
-        put("memo_toolbar_ai", memoToolbarSettings.ai)
         put("memo_toolbar_translation", memoToolbarSettings.translation)
         put("memo_toolbar_ocr", memoToolbarSettings.ocr)
         put("memo_toolbar_share", memoToolbarSettings.share)
         put("memo_toolbar_full_copy", memoToolbarSettings.fullCopy)
-    }
-}
-
-private fun AiEngineManager.AiEnginePreferences.toBackupJson(): JSONObject {
-    return JSONObject().apply {
-        put("selected_engine", selectedEngine.name)
-        put("openai_api_key", openAiApiKey)
-        put("openai_model", openAiModel)
-        put("custom_api_endpoint", customApiEndpoint)
-        put("custom_api_key", customApiKey)
-        put("custom_api_model", customApiModel)
     }
 }

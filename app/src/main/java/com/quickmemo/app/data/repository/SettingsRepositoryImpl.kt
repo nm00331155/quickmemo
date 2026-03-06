@@ -60,10 +60,6 @@ class SettingsRepositoryImpl @Inject constructor(
         dataStore.setTodoReminderOneWeek(enabled)
     }
 
-    override suspend fun setAiPolishPreview(enabled: Boolean) {
-        dataStore.setAiPolishPreview(enabled)
-    }
-
     override suspend fun setRequireAuthOnLaunch(enabled: Boolean) {
         dataStore.setRequireAuthOnLaunch(enabled)
     }

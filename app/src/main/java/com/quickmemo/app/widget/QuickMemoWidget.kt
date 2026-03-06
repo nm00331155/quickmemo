@@ -53,17 +53,6 @@ class QuickMemoWidget : GlanceAppWidget() {
                     horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                 ) {
                     Text(
-                        text = "☑",
-                        modifier = GlanceModifier
-                            .padding(horizontal = 10.dp)
-                            .clickable(
-                                actionStartActivity(
-                                    buildEditorIntent(context, checklist = true)
-                                )
-                            ),
-                    )
-
-                    Text(
                         text = "🧮",
                         modifier = GlanceModifier
                             .padding(horizontal = 10.dp)
@@ -91,13 +80,11 @@ class QuickMemoWidget : GlanceAppWidget() {
 
     private fun buildEditorIntent(
         context: Context,
-        checklist: Boolean = false,
         prefillText: String = "",
         insertToday: Boolean = false,
     ): Intent {
         return Intent(context, MainActivity::class.java).apply {
             action = QuickMemoIntents.ACTION_OPEN_EDITOR
-            putExtra(QuickMemoIntents.EXTRA_IS_CHECKLIST, checklist)
             putExtra(QuickMemoIntents.EXTRA_PRE_FILLED_TEXT, prefillText)
             putExtra(QuickMemoIntents.EXTRA_INSERT_TODAY, insertToday)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP

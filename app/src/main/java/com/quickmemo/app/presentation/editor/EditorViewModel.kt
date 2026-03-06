@@ -1,11 +1,9 @@
 // File: app/src/main/java/com/quickmemo/app/presentation/editor/EditorViewModel.kt
 package com.quickmemo.app.presentation.editor
 
-import com.quickmemo.app.ai.AiUsageManager
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.quickmemo.app.ai.AiAssistantManager
 import com.quickmemo.app.billing.BillingManager
 import com.quickmemo.app.domain.model.Memo
 import com.quickmemo.app.domain.model.MemoBlock
@@ -31,9 +29,7 @@ class EditorViewModel @Inject constructor(
     private val saveMemoUseCase: SaveMemoUseCase,
     private val manageTrashUseCase: ManageTrashUseCase,
     observeSettingsUseCase: ObserveSettingsUseCase,
-    private val aiAssistantManager: AiAssistantManager,
     private val billingManager: BillingManager,
-    private val aiUsageManager: AiUsageManager,
 ) : ViewModel() {
 
     private val memoIdArg: Long = savedStateHandle.get<Long>(ARG_MEMO_ID) ?: 0L
@@ -47,20 +43,12 @@ class EditorViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val aiStatus = aiAssistantManager.checkStatus()
-            _uiState.update { it.copy(aiFeatureStatus = aiStatus) }
-            refreshAiUsage()
-        }
-
-        viewModelScope.launch {
             billingManager.state.collect { billingState ->
                 _uiState.update {
                     it.copy(
                         hasTranslation = billingState.purchaseState.hasTranslation,
-                        hasUnlimitedAi = billingState.purchaseState.hasUnlimitedAi,
                     )
                 }
-                refreshAiUsage()
             }
         }
 
@@ -158,110 +146,6 @@ class EditorViewModel @Inject constructor(
         _uiState.update { it.copy(colorLabel = color) }
     }
 
-    fun openAiSheet() {
-        _uiState.update { it.copy(showAiSheet = true) }
-    }
-
-    fun closeAiSheet() {
-        _uiState.update { it.copy(showAiSheet = false) }
-    }
-
-    fun clearAiResult() {
-        _uiState.update { it.copy(aiResultText = "", isAiLoading = false) }
-    }
-
-    fun summarizeWithAi(plainText: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isAiLoading = true, aiResultText = "") }
-            var consumed = false
-            aiAssistantManager.summarize(plainText).collect { stream ->
-                when (stream) {
-                    is com.quickmemo.app.ai.AiStreamResult.Partial -> {
-                        _uiState.update {
-                            it.copy(
-                                aiResultText = stream.text,
-                                isAiLoading = true,
-                            )
-                        }
-                    }
-
-                    is com.quickmemo.app.ai.AiStreamResult.Complete -> {
-                        _uiState.update {
-                            it.copy(
-                                aiResultText = stream.text,
-                                isAiLoading = false,
-                            )
-                        }
-                        if (!consumed) {
-                            consumeAiUsageOnSuccess()
-                            consumed = true
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fun suggestTagsWithAi(plainText: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isAiLoading = true, aiResultText = "") }
-            val result = aiAssistantManager.suggestTags(plainText)
-            consumeAiUsageOnSuccess()
-            _uiState.update {
-                it.copy(
-                    aiResultText = result,
-                    isAiLoading = false,
-                )
-            }
-        }
-    }
-
-    suspend fun polishTextWithAi(text: String): String {
-        val result = aiAssistantManager.polish(text)
-        consumeAiUsageOnSuccess()
-        return result
-    }
-
-    suspend fun extractTodosWithAi(text: String): String {
-        val result = aiAssistantManager.extractTodos(text)
-        consumeAiUsageOnSuccess()
-        return result
-    }
-
-    suspend fun detectEntitiesWithAi(text: String): String {
-        val result = aiAssistantManager.detectEntities(text)
-        consumeAiUsageOnSuccess()
-        return result
-    }
-
-    suspend fun expandKeywordsWithAi(text: String): String {
-        val result = aiAssistantManager.expandKeywords(text)
-        consumeAiUsageOnSuccess()
-        return result
-    }
-
-    suspend fun extractCalendarEventsWithAi(text: String): String {
-        val result = aiAssistantManager.extractCalendarEvents(text)
-        consumeAiUsageOnSuccess()
-        return result
-    }
-
-    suspend fun canUseAiFeature(): Boolean {
-        return aiUsageManager.canUse(_uiState.value.hasUnlimitedAi)
-    }
-
-    private suspend fun consumeAiUsageOnSuccess() {
-        aiUsageManager.consumeOnSuccess(_uiState.value.hasUnlimitedAi)
-        refreshAiUsage()
-    }
-
-    private suspend fun refreshAiUsage() {
-        val usage = aiUsageManager.getUsage()
-        _uiState.update {
-            it.copy(aiUsageCount = usage.count)
-        }
-    }
-
     suspend fun saveMemo(
         contentHtml: String,
         contentPlainText: String,
@@ -350,7 +234,6 @@ class EditorViewModel @Inject constructor(
     companion object {
         const val ARG_MEMO_ID = "memoId"
         const val ARG_PREFILL_TEXT = "prefillText"
-        const val ARG_PREFILL_CHECKLIST = "prefillChecklist"
         const val ARG_INSERT_TODAY = "insertToday"
         const val ARG_COLOR_LABEL = "colorLabel"
     }

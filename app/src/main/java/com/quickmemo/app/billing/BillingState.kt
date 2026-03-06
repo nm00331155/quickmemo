@@ -5,15 +5,11 @@ import com.android.billingclient.api.ProductDetails
 data class PurchaseState(
     val isPro: Boolean = false,
     val isAdFree: Boolean = false,
-    val hasAiPack: Boolean = false,
     val hasTranslatePack: Boolean = false,
     val hasAllInOne: Boolean = false,
 ) {
     val shouldShowAds: Boolean
         get() = !isPro && !isAdFree && !hasAllInOne
-
-    val hasUnlimitedAi: Boolean
-        get() = isPro || hasAiPack || hasAllInOne
 
     val hasTranslation: Boolean
         get() = isPro || hasTranslatePack || hasAllInOne

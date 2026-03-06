@@ -13,14 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.outlined.TableChart
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,20 +35,14 @@ fun EditorMainBar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onRunOcr: () -> Unit,
-    onInsertNumberedList: () -> Unit,
-    onInsertTable: () -> Unit,
     onOpenCalculator: () -> Unit,
-    onOpenAi: () -> Unit,
     onOpenTranslation: () -> Unit,
     onPickDate: () -> Unit,
     onPickTime: () -> Unit,
     showFullCopy: Boolean,
     showUndoRedo: Boolean,
     showOcr: Boolean,
-    showNumberedList: Boolean,
-    showTable: Boolean,
     showCalculator: Boolean,
-    showAi: Boolean,
     showTranslation: Boolean,
     showDateTimeInsert: Boolean,
     canUndo: Boolean,
@@ -119,30 +110,6 @@ fun EditorMainBar(
                 )
             }
 
-            if (showNumberedList) {
-                ToolbarActionButton(
-                    onClick = onInsertNumberedList,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.FormatListNumbered,
-                            contentDescription = "numbered_list",
-                        )
-                    },
-                )
-            }
-
-            if (showTable) {
-                ToolbarActionButton(
-                    onClick = onInsertTable,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Outlined.TableChart,
-                            contentDescription = "table",
-                        )
-                    },
-                )
-            }
-
             if (showCalculator) {
                 ToolbarActionButton(
                     onClick = onOpenCalculator,
@@ -150,18 +117,6 @@ fun EditorMainBar(
                         Icon(
                             imageVector = Icons.Default.Calculate,
                             contentDescription = "calculator",
-                        )
-                    },
-                )
-            }
-
-            if (showAi) {
-                ToolbarActionButton(
-                    onClick = onOpenAi,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Outlined.AutoAwesome,
-                            contentDescription = "ai",
                         )
                     },
                 )

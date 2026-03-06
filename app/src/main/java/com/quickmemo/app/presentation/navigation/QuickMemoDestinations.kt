@@ -11,18 +11,16 @@ object QuickMemoDestinations {
     const val PREMIUM = "premium"
 
     const val EDITOR =
-        "editor?memoId={memoId}&prefillText={prefillText}&prefillChecklist={prefillChecklist}&insertToday={insertToday}&colorLabel={colorLabel}"
+        "editor?memoId={memoId}&prefillText={prefillText}&insertToday={insertToday}&colorLabel={colorLabel}"
 
     fun editorRoute(
         memoId: Long = 0L,
         prefillText: String = "",
-        prefillChecklist: Boolean = false,
         insertToday: Boolean = false,
         colorLabel: Int = 0,
     ): String {
         return "editor?memoId=$memoId" +
             "&prefillText=${Uri.encode(prefillText)}" +
-            "&prefillChecklist=$prefillChecklist" +
             "&insertToday=$insertToday" +
             "&colorLabel=$colorLabel"
     }

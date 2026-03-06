@@ -77,7 +77,7 @@ class BillingManager @Inject constructor(
     }
 
     fun launchPurchase(activity: Activity) {
-        launchPurchase(activity, Products.AD_FREE)
+        launchPurchase(activity, Products.REMOVE_ADS)
     }
 
     fun launchPurchase(activity: Activity, productId: String) {
@@ -148,15 +148,14 @@ class BillingManager @Inject constructor(
         queryProductDetailsByType(
             productType = BillingClient.ProductType.INAPP,
             productIds = listOf(
-                Products.AD_FREE,
-                Products.AI_PACK,
+                Products.REMOVE_ADS,
                 Products.TRANSLATE_PACK,
                 Products.ALL_IN_ONE,
             ),
         ) { detailsMap ->
             _state.value = _state.value.copy(
                 inAppProductDetails = detailsMap,
-                productDetails = detailsMap[Products.AD_FREE],
+                productDetails = detailsMap[Products.REMOVE_ADS],
             )
         }
 
@@ -220,8 +219,7 @@ class BillingManager @Inject constructor(
             hasPurchased(allPurchases, Products.PRO_YEARLY)
         val purchaseState = PurchaseState(
             isPro = hasPro,
-            isAdFree = hasPurchased(allPurchases, Products.AD_FREE),
-            hasAiPack = hasPurchased(allPurchases, Products.AI_PACK),
+            isAdFree = hasPurchased(allPurchases, Products.REMOVE_ADS),
             hasTranslatePack = hasPurchased(allPurchases, Products.TRANSLATE_PACK),
             hasAllInOne = hasPurchased(allPurchases, Products.ALL_IN_ONE),
         )
@@ -261,13 +259,12 @@ class BillingManager @Inject constructor(
     object Products {
         const val PRO_MONTHLY = "pro_monthly"
         const val PRO_YEARLY = "pro_yearly"
-        const val AD_FREE = "ad_free"
-        const val AI_PACK = "ai_pack"
+        const val REMOVE_ADS = "remove_ads"
         const val TRANSLATE_PACK = "translate_pack"
         const val ALL_IN_ONE = "all_in_one"
     }
 
     companion object {
-        const val PRODUCT_ID_REMOVE_ADS = Products.AD_FREE
+        const val PRODUCT_ID_REMOVE_ADS = Products.REMOVE_ADS
     }
 }

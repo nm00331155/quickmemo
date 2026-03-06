@@ -61,18 +61,13 @@ class SettingsDataStore @Inject constructor(
         val MEMO_TOOLBAR_TEXT_COLOR = booleanPreferencesKey("memo_toolbar_text_color")
         val MEMO_TOOLBAR_HIGHLIGHTER = booleanPreferencesKey("memo_toolbar_highlighter")
         val MEMO_TOOLBAR_TEXT_SIZE = booleanPreferencesKey("memo_toolbar_text_size")
-        val MEMO_TOOLBAR_NUMBERED_LIST = booleanPreferencesKey("memo_toolbar_numbered_list")
-        val MEMO_TOOLBAR_TABLE = booleanPreferencesKey("memo_toolbar_table")
         val MEMO_TOOLBAR_UNDO_REDO = booleanPreferencesKey("memo_toolbar_undo_redo")
         val MEMO_TOOLBAR_DATETIME_INSERT = booleanPreferencesKey("memo_toolbar_datetime_insert")
         val MEMO_TOOLBAR_CALCULATOR = booleanPreferencesKey("memo_toolbar_calculator")
-        val MEMO_TOOLBAR_AI = booleanPreferencesKey("memo_toolbar_ai")
         val MEMO_TOOLBAR_TRANSLATION = booleanPreferencesKey("memo_toolbar_translation")
         val MEMO_TOOLBAR_OCR = booleanPreferencesKey("memo_toolbar_ocr")
         val MEMO_TOOLBAR_SHARE = booleanPreferencesKey("memo_toolbar_share")
         val MEMO_TOOLBAR_FULL_COPY = booleanPreferencesKey("memo_toolbar_full_copy")
-
-        val AI_POLISH_PREVIEW = booleanPreferencesKey("ai_polish_preview")
     }
 
     val settingsFlow: Flow<AppSettings> = context.settingsDataStore.data
@@ -113,12 +108,9 @@ class SettingsDataStore @Inject constructor(
                 textColor = preferences[Keys.MEMO_TOOLBAR_TEXT_COLOR] ?: true,
                 highlighter = preferences[Keys.MEMO_TOOLBAR_HIGHLIGHTER] ?: true,
                 textSize = preferences[Keys.MEMO_TOOLBAR_TEXT_SIZE] ?: true,
-                numberedList = preferences[Keys.MEMO_TOOLBAR_NUMBERED_LIST] ?: true,
-                table = preferences[Keys.MEMO_TOOLBAR_TABLE] ?: true,
                 undoRedo = preferences[Keys.MEMO_TOOLBAR_UNDO_REDO] ?: true,
                 dateTimeInsert = preferences[Keys.MEMO_TOOLBAR_DATETIME_INSERT] ?: true,
                 calculator = preferences[Keys.MEMO_TOOLBAR_CALCULATOR] ?: true,
-                ai = preferences[Keys.MEMO_TOOLBAR_AI] ?: true,
                 translation = preferences[Keys.MEMO_TOOLBAR_TRANSLATION] ?: true,
                 ocr = preferences[Keys.MEMO_TOOLBAR_OCR] ?: true,
                 share = preferences[Keys.MEMO_TOOLBAR_SHARE] ?: true,
@@ -134,7 +126,6 @@ class SettingsDataStore @Inject constructor(
                 quickInputNotificationEnabled = quickInput,
                 todoReminderEnabled = preferences[Keys.TODO_REMINDER_ENABLED] ?: true,
                 reminderSettings = reminderSettings,
-                aiPolishPreview = preferences[Keys.AI_POLISH_PREVIEW] ?: true,
                 requireAuthOnLaunch = preferences[Keys.REQUIRE_AUTH_ON_LAUNCH] ?: false,
                 removeAdsPurchased = preferences[Keys.REMOVE_ADS_PURCHASED] ?: false,
                 lastBackupDateTime = preferences[Keys.LAST_BACKUP_DATETIME],
@@ -196,10 +187,6 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { it[Keys.REQUIRE_AUTH_ON_LAUNCH] = enabled }
     }
 
-    suspend fun setAiPolishPreview(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.AI_POLISH_PREVIEW] = enabled }
-    }
-
     suspend fun setRemoveAdsPurchased(purchased: Boolean) {
         context.settingsDataStore.edit { it[Keys.REMOVE_ADS_PURCHASED] = purchased }
     }
@@ -221,12 +208,9 @@ class SettingsDataStore @Inject constructor(
                 MemoToolbarFeature.TEXT_COLOR -> preferences[Keys.MEMO_TOOLBAR_TEXT_COLOR] = enabled
                 MemoToolbarFeature.HIGHLIGHTER -> preferences[Keys.MEMO_TOOLBAR_HIGHLIGHTER] = enabled
                 MemoToolbarFeature.TEXT_SIZE -> preferences[Keys.MEMO_TOOLBAR_TEXT_SIZE] = enabled
-                MemoToolbarFeature.NUMBERED_LIST -> preferences[Keys.MEMO_TOOLBAR_NUMBERED_LIST] = enabled
-                MemoToolbarFeature.TABLE -> preferences[Keys.MEMO_TOOLBAR_TABLE] = enabled
                 MemoToolbarFeature.UNDO_REDO -> preferences[Keys.MEMO_TOOLBAR_UNDO_REDO] = enabled
                 MemoToolbarFeature.DATETIME_INSERT -> preferences[Keys.MEMO_TOOLBAR_DATETIME_INSERT] = enabled
                 MemoToolbarFeature.CALCULATOR -> preferences[Keys.MEMO_TOOLBAR_CALCULATOR] = enabled
-                MemoToolbarFeature.AI -> preferences[Keys.MEMO_TOOLBAR_AI] = enabled
                 MemoToolbarFeature.TRANSLATION -> preferences[Keys.MEMO_TOOLBAR_TRANSLATION] = enabled
                 MemoToolbarFeature.OCR -> preferences[Keys.MEMO_TOOLBAR_OCR] = enabled
                 MemoToolbarFeature.SHARE -> preferences[Keys.MEMO_TOOLBAR_SHARE] = enabled

@@ -99,7 +99,6 @@ fun PremiumScreen(
             items(
                 listOf(
                     "広告の完全除去",
-                    "AI機能 無制限利用",
                     "翻訳機能",
                     "自動バックアップ",
                     "カスタムテーマ",
@@ -148,18 +147,7 @@ fun PremiumScreen(
                     price = "¥500",
                     purchased = !purchaseState.shouldShowAds,
                     onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.AD_FREE) }
-                    },
-                )
-            }
-
-            item {
-                IndividualPurchaseRow(
-                    label = "AI機能パック",
-                    price = "¥800",
-                    purchased = purchaseState.hasUnlimitedAi,
-                    onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.AI_PACK) }
+                        activity?.let { viewModel.purchase(it, BillingManager.Products.REMOVE_ADS) }
                     },
                 )
             }

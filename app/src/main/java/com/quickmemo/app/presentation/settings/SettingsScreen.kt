@@ -58,8 +58,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.quickmemo.app.ai.AiEngineType
-import com.quickmemo.app.ai.ModelManager
 import com.quickmemo.app.domain.model.MemoColor
 import com.quickmemo.app.domain.model.MemoToolbarFeature
 import com.quickmemo.app.domain.model.ThemeMode
@@ -195,14 +193,6 @@ fun SettingsScreen(
                                 onToggleQuickService(it)
                             },
                             onRequireAuthChanged = viewModel::setRequireAuthOnLaunch,
-                            onAiEngineSelected = viewModel::setSelectedAiEngine,
-                            onOpenAiApiKeyChanged = viewModel::setOpenAiApiKey,
-                            onOpenAiModelChanged = viewModel::setOpenAiModel,
-                            onCustomApiEndpointChanged = viewModel::setCustomApiEndpoint,
-                            onCustomApiKeyChanged = viewModel::setCustomApiKey,
-                            onCustomApiModelChanged = viewModel::setCustomApiModel,
-                            onStartAiModelDownload = viewModel::startAiModelDownload,
-                            onDeleteAiModel = viewModel::deleteAiModel,
                             onCreateBackup = {
                                 val filename = "quickmemo_backup_${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))}.json"
                                 createBackupLauncher.launch(filename)
@@ -231,7 +221,6 @@ fun SettingsScreen(
                             onDefaultColorSelected = viewModel::setDefaultMemoColor,
                             onShowCharCountChanged = viewModel::setShowCharacterCount,
                             onDateIncludeTimeChanged = viewModel::setInsertCurrentTimeWithDate,
-                            onAiPolishPreviewChanged = viewModel::setAiPolishPreview,
                             onToolbarFeatureChanged = viewModel::setMemoToolbarFeature,
                         )
                     }
@@ -317,14 +306,6 @@ private fun GeneralSettingsTab(
     onThemeSelected: (ThemeMode) -> Unit,
     onQuickInputChanged: (Boolean) -> Unit,
     onRequireAuthChanged: (Boolean) -> Unit,
-    onAiEngineSelected: (AiEngineType) -> Unit,
-    onOpenAiApiKeyChanged: (String) -> Unit,
-    onOpenAiModelChanged: (String) -> Unit,
-    onCustomApiEndpointChanged: (String) -> Unit,
-    onCustomApiKeyChanged: (String) -> Unit,
-    onCustomApiModelChanged: (String) -> Unit,
-    onStartAiModelDownload: () -> Unit,
-    onDeleteAiModel: () -> Unit,
     onCreateBackup: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenTrash: () -> Unit,
@@ -365,106 +346,6 @@ private fun GeneralSettingsTab(
         }
 
         item {
-            SectionTitle("AIエンジン")
-            val selectedEngine = uiState.aiEnginePreferences.selectedEngine
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(
-                    AiEngineType.GEMINI_NANO to "Gemini Nano",
-                    AiEngineType.QWEN3_LOCAL to "Qwen3 Local",
-                    AiEngineType.OPENAI_API to "OpenAI API",
-                    AiEngineType.CUSTOM_API to "Custom API",
-                ).forEach { (type, label) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = selectedEngine == type,
-                            onClick = { onAiEngineSelected(type) },
-                        )
-                        Text(label)
-                    }
-                }
-            }
-
-            when (selectedEngine) {
-                AiEngineType.GEMINI_NANO -> {
-                    Text(
-                        text = "端末対応時にオンデバイスで推論します",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                AiEngineType.QWEN3_LOCAL -> {
-                    Text(
-                        text = "モデル状態: ${uiState.aiModelStatus.toDisplayText()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (uiState.aiModelStatus == ModelManager.ModelStatus.DOWNLOADING) {
-                        Text(
-                            text = "進捗: ${(uiState.aiModelProgress * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onStartAiModelDownload) {
-                            Text("モデルをダウンロード")
-                        }
-                        if (uiState.aiModelStatus == ModelManager.ModelStatus.DOWNLOADED) {
-                            TextButton(onClick = onDeleteAiModel) {
-                                Text("モデルを削除")
-                            }
-                        }
-                    }
-                }
-
-                AiEngineType.OPENAI_API -> {
-                    OutlinedTextField(
-                        value = uiState.aiEnginePreferences.openAiApiKey,
-                        onValueChange = onOpenAiApiKeyChanged,
-                        label = { Text("OpenAI APIキー") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = uiState.aiEnginePreferences.openAiModel,
-                        onValueChange = onOpenAiModelChanged,
-                        label = { Text("モデル名") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                }
-
-                AiEngineType.CUSTOM_API -> {
-                    OutlinedTextField(
-                        value = uiState.aiEnginePreferences.customApiEndpoint,
-                        onValueChange = onCustomApiEndpointChanged,
-                        label = { Text("エンドポイント") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = uiState.aiEnginePreferences.customApiKey,
-                        onValueChange = onCustomApiKeyChanged,
-                        label = { Text("APIキー") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    OutlinedTextField(
-                        value = uiState.aiEnginePreferences.customApiModel,
-                        onValueChange = onCustomApiModelChanged,
-                        label = { Text("モデル名") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                }
-            }
-        }
-
-        item {
             SectionTitle("バックアップ")
             TextButton(onClick = onCreateBackup) { Text("バックアップ作成") }
             TextButton(onClick = onOpenBackup) { Text("バックアップ復元") }
@@ -501,7 +382,6 @@ private fun MemoSettingsTab(
     onDefaultColorSelected: (Int) -> Unit,
     onShowCharCountChanged: (Boolean) -> Unit,
     onDateIncludeTimeChanged: (Boolean) -> Unit,
-    onAiPolishPreviewChanged: (Boolean) -> Unit,
     onToolbarFeatureChanged: (MemoToolbarFeature, Boolean) -> Unit,
 ) {
     val toolbar = uiState.settings.memoToolbarSettings
@@ -549,14 +429,6 @@ private fun MemoSettingsTab(
         }
 
         item {
-            SettingSwitchRow(
-                title = "整える機能で常にプレビュー表示",
-                checked = uiState.settings.aiPolishPreview,
-                onCheckedChange = onAiPolishPreviewChanged,
-            )
-        }
-
-        item {
             SectionTitle("メモ機能のオン/オフ")
         }
 
@@ -566,12 +438,9 @@ private fun MemoSettingsTab(
                 "文字色" to (MemoToolbarFeature.TEXT_COLOR to toolbar.textColor),
                 "蛍光ペン" to (MemoToolbarFeature.HIGHLIGHTER to toolbar.highlighter),
                 "文字サイズ" to (MemoToolbarFeature.TEXT_SIZE to toolbar.textSize),
-                "番号付きリスト" to (MemoToolbarFeature.NUMBERED_LIST to toolbar.numberedList),
-                "表" to (MemoToolbarFeature.TABLE to toolbar.table),
                 "Undo/Redo" to (MemoToolbarFeature.UNDO_REDO to toolbar.undoRedo),
                 "日付時刻挿入" to (MemoToolbarFeature.DATETIME_INSERT to toolbar.dateTimeInsert),
                 "電卓" to (MemoToolbarFeature.CALCULATOR to toolbar.calculator),
-                "AI機能" to (MemoToolbarFeature.AI to toolbar.ai),
                 "翻訳" to (MemoToolbarFeature.TRANSLATION to toolbar.translation),
                 "OCR" to (MemoToolbarFeature.OCR to toolbar.ocr),
                 "共有" to (MemoToolbarFeature.SHARE to toolbar.share),
@@ -765,12 +634,3 @@ private fun showHoursPicker(
     ).show()
 }
 
-private fun ModelManager.ModelStatus.toDisplayText(): String {
-    return when (this) {
-        ModelManager.ModelStatus.NOT_DOWNLOADED -> "未ダウンロード"
-        ModelManager.ModelStatus.DOWNLOADING -> "ダウンロード中"
-        ModelManager.ModelStatus.DOWNLOADED -> "利用可能"
-        ModelManager.ModelStatus.DOWNLOAD_FAILED -> "ダウンロード失敗"
-        ModelManager.ModelStatus.CORRUPTED -> "ファイル破損"
-    }
-}

@@ -97,15 +97,13 @@ class MainActivity : FragmentActivity() {
         }
 
         val isOpenEditorAction = intent.action == QuickMemoIntents.ACTION_OPEN_EDITOR ||
-            intent.action == QuickMemoIntents.ACTION_NEW_MEMO ||
-            intent.action == QuickMemoIntents.ACTION_NEW_CHECKLIST
+            intent.action == QuickMemoIntents.ACTION_NEW_MEMO
 
         if (!isOpenEditorAction) return QuickMemoDestinations.HOME
 
         return QuickMemoDestinations.editorRoute(
             memoId = intent.getLongExtra(QuickMemoIntents.EXTRA_MEMO_ID, 0L),
             prefillText = intent.getStringExtra(QuickMemoIntents.EXTRA_PRE_FILLED_TEXT).orEmpty(),
-            prefillChecklist = intent.getBooleanExtra(QuickMemoIntents.EXTRA_IS_CHECKLIST, false),
             insertToday = intent.getBooleanExtra(QuickMemoIntents.EXTRA_INSERT_TODAY, false),
         )
     }

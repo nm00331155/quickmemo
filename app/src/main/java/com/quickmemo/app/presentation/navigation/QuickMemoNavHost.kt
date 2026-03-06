@@ -123,7 +123,6 @@ fun QuickMemoNavHost(
             arguments = listOf(
                 navArgument("memoId") { type = NavType.LongType; defaultValue = 0L },
                 navArgument("prefillText") { type = NavType.StringType; defaultValue = "" },
-                navArgument("prefillChecklist") { type = NavType.BoolType; defaultValue = false },
                 navArgument("insertToday") { type = NavType.BoolType; defaultValue = false },
                 navArgument("colorLabel") { type = NavType.IntType; defaultValue = 0 },
             ),
