@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MemoDao {
+    @Query("SELECT * FROM memos WHERE isPinned = 1 AND isDeleted = 0 ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getLatestPinnedMemoSync(): MemoEntity?
+
     @Query(
         """
         SELECT * FROM memos

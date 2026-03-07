@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TodoDao {
+    @Query("SELECT * FROM todo_items WHERE checked = 0 ORDER BY sortOrder ASC")
+    suspend fun getUncheckedItemsSync(): List<TodoItemEntity>
+
+    @Query("SELECT COUNT(*) FROM todo_items WHERE checked = 1")
+    suspend fun getCheckedCountSync(): Int
+
     @Query(
         """
         SELECT * FROM todo_items

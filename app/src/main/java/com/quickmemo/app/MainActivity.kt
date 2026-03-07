@@ -93,7 +93,9 @@ class MainActivity : FragmentActivity() {
         if (intent == null) return QuickMemoDestinations.HOME
 
         if (intent.action == QuickMemoIntents.ACTION_OPEN_TODO) {
-            return QuickMemoDestinations.TODO
+            return QuickMemoDestinations.todoRoute(
+                addTodo = intent.getBooleanExtra(QuickMemoIntents.EXTRA_ADD_TODO, false),
+            )
         }
 
         val isOpenEditorAction = intent.action == QuickMemoIntents.ACTION_OPEN_EDITOR ||

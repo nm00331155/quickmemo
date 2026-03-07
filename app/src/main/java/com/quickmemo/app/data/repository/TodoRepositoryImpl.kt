@@ -8,6 +8,7 @@ import com.quickmemo.app.data.datastore.settingsDataStore
 import com.quickmemo.app.data.local.dao.TodoDao
 import com.quickmemo.app.domain.model.TodoItem
 import com.quickmemo.app.domain.repository.TodoRepository
+import com.quickmemo.app.service.QuickMemoForegroundService
 import com.quickmemo.app.widget.WidgetUpdateDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -58,11 +59,13 @@ class TodoRepositoryImpl @Inject constructor(
             ).toEntity(),
         )
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
     }
 
     override suspend fun updateText(id: String, text: String) {
         todoDao.updateText(id, text.trim())
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
     }
 
     override suspend fun updateChecked(id: String, checked: Boolean) {
@@ -76,17 +79,20 @@ class TodoRepositoryImpl @Inject constructor(
                 checkedAt = System.currentTimeMillis(),
             )
             notifyTodoWidgetUpdated()
+            notifyQuickNotificationUpdated()
             return
         }
 
         val nextSortOrder = todoDao.getMaxSortOrder(item.tabId) + 1
         todoDao.moveToUncheckedTail(id, nextSortOrder)
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
     }
 
     override suspend fun updateDueDate(id: String, dueDate: Long?) {
         todoDao.updateDueDate(id, dueDate)
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
     }
 
     override suspend fun reorderUncheckedItems(tabId: Int, orderedIds: List<String>) {
@@ -99,6 +105,7 @@ class TodoRepositoryImpl @Inject constructor(
         if (reordered.isNotEmpty()) {
             todoDao.upsertItems(reordered)
             notifyTodoWidgetUpdated()
+            notifyQuickNotificationUpdated()
         }
     }
 
@@ -106,6 +113,7 @@ class TodoRepositoryImpl @Inject constructor(
         val item = todoDao.getItemById(id)?.toDomain()
         todoDao.deleteItem(id)
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
         return item
     }
 
@@ -118,6 +126,7 @@ class TodoRepositoryImpl @Inject constructor(
         }
         todoDao.upsertItem(restored.toEntity())
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
     }
 
     override suspend fun setTabName(tabId: Int, name: String) {
@@ -130,11 +139,18 @@ class TodoRepositoryImpl @Inject constructor(
             preferences[TAB_NAMES_KEY] = JSONArray(current).toString()
         }
         notifyTodoWidgetUpdated()
+        notifyQuickNotificationUpdated()
     }
 
     private suspend fun notifyTodoWidgetUpdated() {
         runCatching {
             WidgetUpdateDispatcher.updateTodoWidgets(context)
+        }
+    }
+
+    private fun notifyQuickNotificationUpdated() {
+        runCatching {
+            QuickMemoForegroundService.refreshFromOutside(context)
         }
     }
 

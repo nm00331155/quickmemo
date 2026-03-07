@@ -23,6 +23,7 @@
     <string name="quick_input_notification_title">QuickMemo</string>
     <string name="quick_input_notification_text">Tap to create a new memo</string>
     <string name="quick_new_memo">New memo</string>
+    <string name="quick_new_todo">新規Todo</string>
     <string name="widget_memo_description">メモ表示ウィジェット</string>
     <string name="widget_new_memo_description">新規メモ作成ウィジェット</string>
     <string name="widget_todo_description">Todoウィジェット</string>

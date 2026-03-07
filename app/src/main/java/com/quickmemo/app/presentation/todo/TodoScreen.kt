@@ -93,6 +93,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun TodoScreen(
     paddingValues: PaddingValues,
+    openAddComposer: Boolean = false,
     modifier: Modifier = Modifier,
     viewModel: TodoViewModel = hiltViewModel(),
 ) {
@@ -119,6 +120,12 @@ fun TodoScreen(
     LaunchedEffect(isAdding) {
         if (isAdding) {
             addFieldFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(openAddComposer) {
+        if (openAddComposer) {
+            isAdding = true
         }
     }
 

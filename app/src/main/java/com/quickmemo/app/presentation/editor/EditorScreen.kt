@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -41,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -67,7 +73,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -95,6 +100,7 @@ import java.io.File
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Calendar
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
@@ -127,10 +133,7 @@ fun EditorScreen(
     var undoSnapshotRaw by remember { mutableStateOf("") }
     var isApplyingSnapshot by remember { mutableStateOf(false) }
 
-    var showCalculatorDialog by remember { mutableStateOf(false) }
-    var calculatorExpression by remember { mutableStateOf("") }
-    var calculatorResult by remember { mutableStateOf("") }
-    var calculatorError by remember { mutableStateOf<String?>(null) }
+    var showCalculatorSheet by remember { mutableStateOf(false) }
 
     var showOcrSourceSheet by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -141,6 +144,16 @@ fun EditorScreen(
     var isTranslationLoading by remember { mutableStateOf(false) }
     var translationResult by remember { mutableStateOf<TranslationResult?>(null) }
     var showTranslationResultDialog by remember { mutableStateOf(false) }
+
+    var showTtsDialog by remember { mutableStateOf(false) }
+    var ttsSpeechRate by remember { mutableStateOf(1.0f) }
+    var ttsPitch by remember { mutableStateOf(1.0f) }
+    var ttsReady by remember { mutableStateOf(false) }
+    var ttsInitStatus by remember { mutableStateOf<Int?>(null) }
+    var ttsErrorMessage by remember { mutableStateOf<String?>(null) }
+    var isSpeaking by remember { mutableStateOf(false) }
+    var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+    val mainThreadHandler = remember { Handler(Looper.getMainLooper()) }
 
     val ocrProcessor = remember { OcrProcessor() }
     val translationManager = remember { TranslationManager() }
@@ -290,25 +303,44 @@ fun EditorScreen(
         applyUndoRedoSnapshot(snapshot)
     }
 
-    fun evaluateCalculatorExpression(): Boolean {
-        val source = calculatorExpression.trim()
-        if (source.isBlank()) {
-            calculatorError = "式を入力してください"
-            calculatorResult = ""
-            return false
+    fun startTtsReading() {
+        val text = currentPlainText.trim()
+        if (text.isBlank()) {
+            scope.launch {
+                snackbarHostState.showSnackbar("読み上げるテキストがありません")
+            }
+            return
         }
 
-        return runCatching {
-            formatCalculatorResult(
-                parseCalculatorExpression(source),
-            )
-        }.onSuccess { result ->
-            calculatorResult = result
-            calculatorError = null
-        }.onFailure { throwable ->
-            calculatorResult = ""
-            calculatorError = throwable.message ?: "計算に失敗しました"
-        }.isSuccess
+        val engine = ttsEngine
+        if (engine == null || !ttsReady) {
+            scope.launch {
+                snackbarHostState.showSnackbar(ttsErrorMessage ?: "読み上げ機能を初期化できませんでした")
+            }
+            return
+        }
+
+        engine.setSpeechRate(ttsSpeechRate)
+        engine.setPitch(ttsPitch)
+        val speakResult = engine.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "quickmemo_editor_tts",
+        )
+        if (speakResult == TextToSpeech.ERROR) {
+            scope.launch {
+                snackbarHostState.showSnackbar("読み上げ開始に失敗しました")
+            }
+            isSpeaking = false
+            return
+        }
+        isSpeaking = true
+    }
+
+    fun stopTtsReading() {
+        ttsEngine?.stop()
+        isSpeaking = false
     }
 
     suspend fun ensureTranslationReady(): Boolean {
@@ -483,10 +515,74 @@ fun EditorScreen(
             }
     }
 
+    LaunchedEffect(ttsInitStatus, ttsEngine) {
+        when (ttsInitStatus) {
+            TextToSpeech.SUCCESS -> {
+                val engine = ttsEngine ?: return@LaunchedEffect
+                val languageResult = engine.setLanguage(Locale.JAPANESE)
+                val available = languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                ttsReady = available
+                ttsErrorMessage = if (available) {
+                    null
+                } else {
+                    "日本語の読み上げ音声が利用できません"
+                }
+            }
+
+            TextToSpeech.ERROR -> {
+                ttsReady = false
+                ttsErrorMessage = "読み上げ機能を初期化できませんでした"
+            }
+
+            else -> Unit
+        }
+    }
+
     BackHandler {
         scope.launch {
             persistCurrentMemo()
             onNavigateBack()
+        }
+    }
+
+    DisposableEffect(context) {
+        val engine = TextToSpeech(context.applicationContext) { status ->
+            mainThreadHandler.post {
+                ttsInitStatus = status
+            }
+        }
+        engine.setOnUtteranceProgressListener(
+            object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    mainThreadHandler.post { isSpeaking = true }
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    mainThreadHandler.post { isSpeaking = false }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    mainThreadHandler.post { isSpeaking = false }
+                }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    mainThreadHandler.post { isSpeaking = false }
+                }
+            },
+        )
+        ttsEngine = engine
+
+        onDispose {
+            runCatching {
+                engine.stop()
+                engine.shutdown()
+            }
+            ttsEngine = null
+            ttsReady = false
+            ttsInitStatus = null
+            isSpeaking = false
         }
     }
 
@@ -547,6 +643,13 @@ fun EditorScreen(
                             }
                         }
 
+                        IconButton(onClick = { showTtsDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "tts",
+                            )
+                        }
+
                         IconButton(onClick = onOpenTodo) {
                             Icon(
                                 imageVector = Icons.Outlined.CheckBox,
@@ -581,7 +684,7 @@ fun EditorScreen(
                         }
                     },
                     onOpenCalculator = {
-                        showCalculatorDialog = true
+                        showCalculatorSheet = true
                     },
                     onOpenTranslation = {
                         runTranslationFlow(
@@ -811,41 +914,32 @@ fun EditorScreen(
         }
     }
 
-    if (showCalculatorDialog) {
+    if (showTtsDialog) {
         AlertDialog(
-            onDismissRequest = {
-                showCalculatorDialog = false
-                calculatorError = null
-            },
-            title = { Text("電卓") },
+            onDismissRequest = { showTtsDialog = false },
+            title = { Text("読み上げ") },
             text = {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    OutlinedTextField(
-                        value = calculatorExpression,
-                        onValueChange = {
-                            calculatorExpression = it
-                            calculatorError = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("式") },
-                        placeholder = { Text("例: (1200+300)*0.1") },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Ascii,
-                            imeAction = ImeAction.Done,
-                        ),
+                    Text("速度: ${String.format(Locale.US, "%.1f", ttsSpeechRate)}x")
+                    Slider(
+                        value = ttsSpeechRate,
+                        onValueChange = { ttsSpeechRate = it },
+                        valueRange = 0.5f..2.0f,
                     )
 
-                    if (calculatorResult.isNotBlank()) {
-                        Text("結果: $calculatorResult")
-                    }
+                    Text("ピッチ: ${String.format(Locale.US, "%.1f", ttsPitch)}")
+                    Slider(
+                        value = ttsPitch,
+                        onValueChange = { ttsPitch = it },
+                        valueRange = 0.5f..2.0f,
+                    )
 
-                    val error = calculatorError
-                    if (!error.isNullOrBlank()) {
+                    val message = ttsErrorMessage
+                    if (!message.isNullOrBlank()) {
                         Text(
-                            text = error,
+                            text = message,
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
@@ -853,26 +947,37 @@ fun EditorScreen(
             },
             confirmButton = {
                 Row {
-                    TextButton(onClick = { evaluateCalculatorExpression() }) {
-                        Text("計算")
-                    }
-                    TextButton(
-                        onClick = {
-                            if (evaluateCalculatorExpression()) {
-                                appendTextToEditor(calculatorResult)
-                                showCalculatorDialog = false
-                            }
-                        },
-                    ) {
-                        Text("挿入")
+                    if (isSpeaking) {
+                        TextButton(onClick = ::stopTtsReading) {
+                            Text("停止")
+                        }
+                    } else {
+                        TextButton(onClick = ::startTtsReading) {
+                            Text("読み上げ")
+                        }
                     }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCalculatorDialog = false }) {
+                TextButton(onClick = { showTtsDialog = false }) {
                     Text("閉じる")
                 }
             },
+        )
+    }
+
+    if (showCalculatorSheet) {
+        CalculatorBottomSheet(
+            cursorContextText = buildCursorContextText(activeRichTextState()),
+            onInsertExpressionAndResult = { expression, result ->
+                appendTextToEditor("$expression\n=$result")
+                showCalculatorSheet = false
+            },
+            onInsertResultOnly = { result ->
+                appendTextToEditor("=$result")
+                showCalculatorSheet = false
+            },
+            onDismiss = { showCalculatorSheet = false },
         )
     }
 
@@ -983,15 +1088,15 @@ fun EditorScreen(
     }
 }
 
-private fun parseCalculatorExpression(source: String): BigDecimal {
+internal fun parseCalculatorExpression(source: String): BigDecimal {
     return CalculatorExpressionParser(source).parse()
 }
 
-private fun formatCalculatorResult(value: BigDecimal): String {
+internal fun formatCalculatorResult(value: BigDecimal): String {
     return value.stripTrailingZeros().toPlainString()
 }
 
-private class CalculatorExpressionParser(
+internal class CalculatorExpressionParser(
     private val source: String,
 ) {
     private var index: Int = 0
@@ -1098,6 +1203,19 @@ private class CalculatorExpressionParser(
             index += 1
         }
     }
+}
+
+private fun buildCursorContextText(richTextState: RichTextState?): String {
+    if (richTextState == null) return ""
+    val plainText = richTextState.annotatedString.text
+    val cursorPos = richTextState.selection.start.coerceIn(0, plainText.length)
+    val beforeStart = (cursorPos - 20).coerceAtLeast(0)
+    val afterEnd = (cursorPos + 20).coerceAtMost(plainText.length)
+    val before = plainText.substring(beforeStart, cursorPos)
+    val after = plainText.substring(cursorPos, afterEnd)
+    val prefix = if (beforeStart > 0) "…" else ""
+    val suffix = if (afterEnd < plainText.length) "…" else ""
+    return "$prefix$before【▍】$after$suffix"
 }
 
 private fun ensureAtLeastOneRichBlock(blocks: List<MemoBlock>): List<MemoBlock> {

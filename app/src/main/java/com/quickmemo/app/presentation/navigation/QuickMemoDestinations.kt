@@ -4,7 +4,7 @@ import android.net.Uri
 
 object QuickMemoDestinations {
     const val HOME = "home"
-    const val TODO = "todo"
+    const val TODO = "todo?addTodo={addTodo}"
     const val SEARCH = "search"
     const val SETTINGS = "settings?startTab={startTab}"
     const val TRASH = "trash"
@@ -28,5 +28,9 @@ object QuickMemoDestinations {
     fun settingsRoute(startTab: Int = 0): String {
         val normalized = startTab.coerceIn(0, 2)
         return "settings?startTab=$normalized"
+    }
+
+    fun todoRoute(addTodo: Boolean = false): String {
+        return "todo?addTodo=$addTodo"
     }
 }

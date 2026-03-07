@@ -1,10 +1,8 @@
 package com.quickmemo.app.di
 
 import android.content.Context
-import androidx.room.Room
 import com.quickmemo.app.data.local.dao.MemoDao
 import com.quickmemo.app.data.local.dao.TodoDao
-import com.quickmemo.app.data.local.database.DatabaseMigrations
 import com.quickmemo.app.data.local.database.QuickMemoDatabase
 import dagger.Module
 import dagger.Provides
@@ -22,19 +20,7 @@ object DatabaseModule {
     fun provideQuickMemoDatabase(
         @ApplicationContext context: Context,
     ): QuickMemoDatabase {
-        return Room.databaseBuilder(
-            context,
-            QuickMemoDatabase::class.java,
-            QuickMemoDatabase.DB_NAME,
-        )
-            .addMigrations(DatabaseMigrations.MIGRATION_1_2)
-            .addMigrations(DatabaseMigrations.MIGRATION_2_3)
-            .addMigrations(DatabaseMigrations.MIGRATION_3_4)
-            .addMigrations(DatabaseMigrations.MIGRATION_4_5)
-            .addMigrations(DatabaseMigrations.MIGRATION_5_6)
-            .addMigrations(DatabaseMigrations.MIGRATION_6_7)
-            .fallbackToDestructiveMigrationOnDowngrade()
-            .build()
+        return QuickMemoDatabase.getInstance(context)
     }
 
     @Provides

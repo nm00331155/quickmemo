@@ -112,7 +112,7 @@ fun QuickMemoNavHost(
                     }
                 },
                 onOpenTodo = {
-                    navigateSingleTop(QuickMemoDestinations.TODO)
+                    navigateSingleTop(QuickMemoDestinations.todoRoute())
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -132,7 +132,7 @@ fun QuickMemoNavHost(
                     popOrNavigateHome()
                 },
                 onOpenTodo = {
-                    navigateSingleTop(QuickMemoDestinations.TODO)
+                    navigateSingleTop(QuickMemoDestinations.todoRoute())
                 },
                 onOpenSettings = {
                     navigateSingleTop(QuickMemoDestinations.settingsRoute(startTab = 1))
@@ -147,7 +147,7 @@ fun QuickMemoNavHost(
                 onOpenEditor = { memoId ->
                     navigateSingleTop(QuickMemoDestinations.editorRoute(memoId = memoId))
                 },
-                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.TODO) },
+                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.todoRoute()) },
                 onOpenSettings = { navigateSingleTop(QuickMemoDestinations.settingsRoute(startTab = 0)) },
                 onRequestUnlockMemo = { _, onResult ->
                     onRequestBiometric("ロックされたメモを開く") { passed ->
@@ -169,7 +169,7 @@ fun QuickMemoNavHost(
                 onBack = { popOrNavigateHome() },
                 onOpenTrash = { navigateSingleTop(QuickMemoDestinations.TRASH) },
                 onOpenPremium = { navigateSingleTop(QuickMemoDestinations.PREMIUM) },
-                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.TODO) },
+                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.todoRoute()) },
                 onToggleQuickService = onToggleQuickService,
                 onToggleTodoReminder = onToggleTodoReminder,
             )
@@ -178,12 +178,18 @@ fun QuickMemoNavHost(
         composable(route = QuickMemoDestinations.TRASH) {
             TrashScreen(
                 onBack = { popOrNavigateHome() },
-                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.TODO) },
+                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.todoRoute()) },
                 onOpenSettings = { navigateSingleTop(QuickMemoDestinations.settingsRoute(startTab = 0)) },
             )
         }
 
-        composable(route = QuickMemoDestinations.TODO) {
+        composable(
+            route = QuickMemoDestinations.TODO,
+            arguments = listOf(
+                navArgument("addTodo") { type = NavType.BoolType; defaultValue = false },
+            ),
+        ) { backStackEntry ->
+            val addTodo = backStackEntry.arguments?.getBoolean("addTodo") ?: false
             Scaffold(
                 topBar = {
                     TopAppBar(
@@ -215,6 +221,7 @@ fun QuickMemoNavHost(
             ) { paddingValues ->
                 TodoScreen(
                     paddingValues = paddingValues,
+                    openAddComposer = addTodo,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -223,7 +230,7 @@ fun QuickMemoNavHost(
         composable(route = QuickMemoDestinations.PREMIUM) {
             PremiumScreen(
                 onBack = { popOrNavigateHome() },
-                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.TODO) },
+                onOpenTodo = { navigateSingleTop(QuickMemoDestinations.todoRoute()) },
                 onOpenSettings = { navigateSingleTop(QuickMemoDestinations.settingsRoute(startTab = 0)) },
             )
         }
