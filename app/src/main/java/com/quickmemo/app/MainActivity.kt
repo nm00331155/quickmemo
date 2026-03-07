@@ -1,7 +1,10 @@
 package com.quickmemo.app
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -144,6 +148,7 @@ private fun MainActivityContent(
     }
     var showLockscreenGuide by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(settings.quickInputNotificationEnabled) {
         onToggleQuickService(settings.quickInputNotificationEnabled)
@@ -200,6 +205,11 @@ private fun MainActivityContent(
                     Text("1. 設定 → 通知 → ロック画面の通知 → 「すべての通知内容を表示」を選択")
                     Text("2. QuickMemoの通知チャンネルが有効になっていること")
                     Text(
+                        "端末の通知設定で「すべての通知内容を表示」を有効にすると、ロック画面にTodoが表示されます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
                         "この設定はアプリの設定画面からいつでも変更できます。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -209,6 +219,20 @@ private fun MainActivityContent(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val intent = Intent().apply {
+                            when {
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                                    action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                }
+
+                                else -> {
+                                    action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                            }
+                        }
+                        context.startActivity(intent)
                         showLockscreenGuide = false
                         scope.launch {
                             onSetLockscreenGuideShown()
@@ -216,7 +240,7 @@ private fun MainActivityContent(
                         }
                     },
                 ) {
-                    Text("有効にする")
+                    Text("通知を設定する")
                 }
             },
             dismissButton = {

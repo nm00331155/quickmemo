@@ -16,7 +16,6 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
@@ -27,7 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.quickmemo.app.R
 
 @Composable
 fun EditorMainBar(
@@ -137,7 +138,14 @@ fun EditorMainBar(
             if (showDateTimeInsert) {
                 ToolbarActionButton(
                     onClick = onPickDate,
-                    icon = { Icon(imageVector = Icons.Default.CalendarToday, contentDescription = "date") },
+                    icon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_calendar_check),
+                            contentDescription = "日付挿入",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
                 )
 
                 ToolbarActionButton(
