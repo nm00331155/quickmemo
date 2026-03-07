@@ -28,6 +28,7 @@ data class AppSettings(
     val showCharacterCount: Boolean = true,
     val insertCurrentTimeWithDate: Boolean = false,
     val quickInputNotificationEnabled: Boolean = true,
+    val lockscreenGuideShown: Boolean = false,
     val todoReminderEnabled: Boolean = true,
     val reminderSettings: ReminderSettings = ReminderSettings(),
     val requireAuthOnLaunch: Boolean = false,

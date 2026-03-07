@@ -40,6 +40,14 @@ class SettingsRepositoryImpl @Inject constructor(
         dataStore.setQuickInputNotificationEnabled(enabled)
     }
 
+    override fun observeLockscreenGuideShown(): Flow<Boolean> {
+        return dataStore.lockscreenGuideShownFlow
+    }
+
+    override suspend fun setLockscreenGuideShown() {
+        dataStore.setLockscreenGuideShown()
+    }
+
     override suspend fun setTodoReminderEnabled(enabled: Boolean) {
         dataStore.setTodoReminderEnabled(enabled)
     }

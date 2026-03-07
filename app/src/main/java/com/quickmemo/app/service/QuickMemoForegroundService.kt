@@ -86,7 +86,6 @@ class QuickMemoForegroundService : Service() {
     private suspend fun buildNotification(): Notification {
         val db = QuickMemoDatabase.getInstance(applicationContext)
         val todoDao = db.todoDao()
-        val memoDao = db.memoDao()
 
         val uncheckedItems = try {
             todoDao.getUncheckedItemsSync()
@@ -103,27 +102,17 @@ class QuickMemoForegroundService : Service() {
 
         val totalCount = uncheckedItems.size + checkedCount
 
-        val pinnedMemo = try {
-            memoDao.getLatestPinnedMemoSync()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load pinned memo", e)
-            null
-        }
-
         Log.d(
             TAG,
-            "Building notification: unchecked=${uncheckedItems.size}, checked=$checkedCount, total=$totalCount, hasPinnedMemo=${pinnedMemo != null}",
+            "Building notification: unchecked=${uncheckedItems.size}, checked=$checkedCount, total=$totalCount",
         )
 
         val collapsedView = RemoteViews(packageName, R.layout.notification_collapsed)
 
         val summaryText = if (totalCount > 0) {
             "☑ Todo $checkedCount/$totalCount 完了"
-        } else if (pinnedMemo != null) {
-            val title = pinnedMemo.title.trim().ifBlank { "メモ" }
-            "📝 $title"
         } else {
-            "QuickMemo"
+            "☑ Todoなし"
         }
         collapsedView.setTextViewText(R.id.notification_summary, summaryText)
 
@@ -133,46 +122,19 @@ class QuickMemoForegroundService : Service() {
             R.id.notification_line3,
         )
 
-        if (uncheckedItems.isNotEmpty()) {
-            val displayItems = uncheckedItems.take(3)
-            for (index in lineIds.indices) {
-                if (index < displayItems.size) {
-                    val line = displayItems[index].text.trim().replace("\n", " ")
-                    collapsedView.setTextViewText(lineIds[index], "☐ $line")
-                    collapsedView.setViewVisibility(lineIds[index], android.view.View.VISIBLE)
-                } else {
-                    collapsedView.setViewVisibility(lineIds[index], android.view.View.GONE)
-                }
+        val collapsedItems = uncheckedItems.take(3)
+        for (index in lineIds.indices) {
+            if (index < collapsedItems.size) {
+                val line = collapsedItems[index].text.trim().replace("\n", " ")
+                collapsedView.setTextViewText(lineIds[index], "☐ $line")
+                collapsedView.setViewVisibility(lineIds[index], android.view.View.VISIBLE)
+            } else {
+                collapsedView.setViewVisibility(lineIds[index], android.view.View.GONE)
             }
-        } else if (pinnedMemo != null) {
-            val memoLines = pinnedMemo.contentPlainText
-                .split("\n")
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .take(3)
-
-            for (index in lineIds.indices) {
-                if (index < memoLines.size) {
-                    collapsedView.setTextViewText(lineIds[index], memoLines[index].take(50))
-                    collapsedView.setViewVisibility(lineIds[index], android.view.View.VISIBLE)
-                } else {
-                    collapsedView.setViewVisibility(lineIds[index], android.view.View.GONE)
-                }
-            }
-        } else {
-            collapsedView.setTextViewText(lineIds[0], "タップして開く")
-            collapsedView.setViewVisibility(lineIds[0], android.view.View.VISIBLE)
-            collapsedView.setViewVisibility(lineIds[1], android.view.View.GONE)
-            collapsedView.setViewVisibility(lineIds[2], android.view.View.GONE)
         }
 
-        val memoTitle = pinnedMemo?.title.orEmpty().trim()
-        val memoBody = pinnedMemo?.contentPlainText.orEmpty()
-            .replace("\n", " ")
-            .trim()
-
         val expandedView = RemoteViews(packageName, R.layout.notification_expanded)
-        expandedView.setTextViewText(R.id.notification_header, "☑ Todo ($checkedCount/$totalCount)")
+        expandedView.setTextViewText(R.id.notification_header, "☑ Todo ($checkedCount/$totalCount 完了)")
 
         val todoTextIds = listOf(
             R.id.notification_todo_1,
@@ -181,11 +143,11 @@ class QuickMemoForegroundService : Service() {
             R.id.notification_todo_4,
             R.id.notification_todo_5,
         )
-        val displayItems = uncheckedItems.take(5)
+        val expandedItems = uncheckedItems.take(5)
 
         for (index in todoTextIds.indices) {
-            if (index < displayItems.size) {
-                val itemText = displayItems[index].text.trim().replace("\n", " ")
+            if (index < expandedItems.size) {
+                val itemText = expandedItems[index].text.trim().replace("\n", " ")
                 expandedView.setTextViewText(todoTextIds[index], "☐ $itemText")
                 expandedView.setViewVisibility(todoTextIds[index], android.view.View.VISIBLE)
             } else {
@@ -193,25 +155,17 @@ class QuickMemoForegroundService : Service() {
             }
         }
 
+        expandedView.setViewVisibility(R.id.notification_pinned_memo, android.view.View.GONE)
+
         val remainingCount = uncheckedItems.size - 5
         if (remainingCount > 0) {
-            expandedView.setTextViewText(R.id.notification_footer, "他 ${remainingCount}件 →")
-            expandedView.setViewVisibility(R.id.notification_footer, android.view.View.VISIBLE)
+            expandedView.setTextViewText(R.id.notification_footer, "他 ${remainingCount}件 → タップして全件表示")
+        } else if (uncheckedItems.isEmpty()) {
+            expandedView.setTextViewText(R.id.notification_footer, "すべて完了！ →")
         } else {
             expandedView.setTextViewText(R.id.notification_footer, "タップして開く →")
-            expandedView.setViewVisibility(R.id.notification_footer, android.view.View.VISIBLE)
         }
-
-        if (pinnedMemo != null) {
-            val expandedMemoPreview = if (memoTitle.isNotBlank()) memoTitle else memoBody.take(50)
-            expandedView.setTextViewText(
-                R.id.notification_pinned_memo,
-                "📝 $expandedMemoPreview",
-            )
-            expandedView.setViewVisibility(R.id.notification_pinned_memo, android.view.View.VISIBLE)
-        } else {
-            expandedView.setViewVisibility(R.id.notification_pinned_memo, android.view.View.GONE)
-        }
+        expandedView.setViewVisibility(R.id.notification_footer, android.view.View.VISIBLE)
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             action = QuickMemoIntents.ACTION_OPEN_TODO
@@ -246,40 +200,29 @@ class QuickMemoForegroundService : Service() {
             .setAllowGeneratedReplies(false)
             .build()
 
-        val remoteInputMemo = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_ADD_MEMO)
-            .setLabel("メモを入力...")
-            .build()
-
-        val addMemoBroadcastIntent = Intent(this, NotificationActionReceiver::class.java).apply {
-            action = NotificationActionReceiver.ACTION_ADD_MEMO
+        val openEditorIntent = Intent(this, MainActivity::class.java).apply {
+            action = QuickMemoIntents.ACTION_OPEN_EDITOR
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        val addMemoPending = PendingIntent.getBroadcast(
+        val openEditorPending = PendingIntent.getActivity(
             this,
-            201,
-            addMemoBroadcastIntent,
-            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            101,
+            openEditorIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val addMemoAction = NotificationCompat.Action.Builder(
-            0,
-            "メモ追加",
-            addMemoPending,
-        )
-            .addRemoteInput(remoteInputMemo)
-            .setAllowGeneratedReplies(false)
-            .build()
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_memo)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCustomContentView(collapsedView)
             .setCustomBigContentView(expandedView)
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setContentIntent(openAppPending)
-                .addAction(addTodoAction)
-                .addAction(addMemoAction)
+            .addAction(addTodoAction)
+            .addAction(0, "メモを編集", openEditorPending)
             .build()
     }
 
@@ -287,24 +230,27 @@ class QuickMemoForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "QuickMemo クイック入力",
-                NotificationManager.IMPORTANCE_LOW,
+                "QuickMemo Todo表示",
+                NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
-                description = "ロック画面・通知バーにTodoやメモを表示します"
+                description = "ロック画面・通知バーにTodoを表示します"
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
             Log.d(
                 TAG,
-                "NotificationChannel created: importance=LOW, lockscreenVisibility=PUBLIC",
+                "NotificationChannel created: importance=DEFAULT, sound=null, lockscreenVisibility=PUBLIC",
             )
         }
     }
 
     companion object {
-        const val CHANNEL_ID = "quickmemo_quick_input_v3"
+        const val CHANNEL_ID = "quickmemo_todo_display_v1"
         const val NOTIFICATION_ID = 1101
         const val ACTION_REFRESH = "com.quickmemo.app.ACTION_REFRESH_NOTIFICATION"
         private const val TAG = "QM_NOTIF"

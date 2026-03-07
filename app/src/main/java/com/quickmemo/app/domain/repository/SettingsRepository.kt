@@ -15,6 +15,8 @@ interface SettingsRepository {
     suspend fun setShowCharacterCount(enabled: Boolean)
     suspend fun setInsertCurrentTimeWithDate(enabled: Boolean)
     suspend fun setQuickInputNotificationEnabled(enabled: Boolean)
+    fun observeLockscreenGuideShown(): Flow<Boolean>
+    suspend fun setLockscreenGuideShown()
     suspend fun setTodoReminderEnabled(enabled: Boolean)
     suspend fun setTodoReminderCustomHours(hours: Int?)
     suspend fun setTodoReminderOneDay(enabled: Boolean)

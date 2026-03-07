@@ -30,8 +30,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -148,18 +148,18 @@ fun TodoScreen(
 
     val lazyListState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val fromIndex = from.index
-        val toIndex = to.index
-
-        if (fromIndex !in displayUncheckedItems.indices || toIndex !in displayUncheckedItems.indices) {
+        if (displayUncheckedItems.isEmpty()) {
             return@rememberReorderableLazyListState
         }
+
+        val fromIndex = from.index.coerceIn(0, displayUncheckedItems.lastIndex)
+        val toIndex = to.index.coerceIn(0, displayUncheckedItems.lastIndex)
+        if (fromIndex == toIndex) return@rememberReorderableLazyListState
 
         val reordered = displayUncheckedItems.toMutableList().apply {
             add(toIndex, removeAt(fromIndex))
         }
         displayUncheckedItems = reordered
-        viewModel.reorderUncheckedItems(reordered.map { it.id })
     }
 
     fun submitNewItem() {
@@ -209,7 +209,7 @@ fun TodoScreen(
                 .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            items(displayUncheckedItems, key = { "unchecked_${it.id}" }) { item ->
+            items(displayUncheckedItems, key = { it.id }) { item ->
                 ReorderableItem(
                     state = reorderState,
                     key = item.id,
@@ -232,7 +232,13 @@ fun TodoScreen(
                                 modifier = with(reorderableScope) {
                                     Modifier
                                         .size(20.dp)
-                                        .draggableHandle()
+                                        .draggableHandle(
+                                            onDragStopped = {
+                                                viewModel.reorderUncheckedItems(
+                                                    displayUncheckedItems.map { it.id },
+                                                )
+                                            },
+                                        )
                                 },
                                 onClick = {},
                             ) {
@@ -627,7 +633,7 @@ private fun DueDateAction(
             modifier = Modifier.size(20.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.CalendarToday,
+                imageVector = Icons.Outlined.Event,
                 contentDescription = "期限",
                 tint = iconTint,
                 modifier = Modifier.size(20.dp),

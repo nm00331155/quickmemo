@@ -47,6 +47,7 @@ class SettingsDataStore @Inject constructor(
 
         val NOTIFICATION_QUICK_INPUT = booleanPreferencesKey("notification_quick_input")
         val LEGACY_NOTIFICATION_QUICK_INPUT = booleanPreferencesKey("quick_input_notification")
+        val LOCKSCREEN_GUIDE_SHOWN = booleanPreferencesKey("lockscreen_guide_shown")
 
         val TODO_REMINDER_ENABLED = booleanPreferencesKey("todo_reminder_enabled")
         val TODO_REMINDER_CUSTOM_HOURS = intPreferencesKey("todo_reminder_custom_hours")
@@ -83,6 +84,18 @@ class SettingsDataStore @Inject constructor(
         }
         .map { preferences ->
             (preferences[Keys.CALCULATOR_TAX_RATE] ?: 10.0).coerceIn(0.0, 100.0)
+        }
+
+    val lockscreenGuideShownFlow: Flow<Boolean> = context.settingsDataStore.data
+        .catch { throwable ->
+            if (throwable is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw throwable
+            }
+        }
+        .map { preferences ->
+            preferences[Keys.LOCKSCREEN_GUIDE_SHOWN] ?: false
         }
 
     val settingsFlow: Flow<AppSettings> = context.settingsDataStore.data
@@ -139,6 +152,7 @@ class SettingsDataStore @Inject constructor(
                 showCharacterCount = showCharCount,
                 insertCurrentTimeWithDate = includeTime,
                 quickInputNotificationEnabled = quickInput,
+                lockscreenGuideShown = preferences[Keys.LOCKSCREEN_GUIDE_SHOWN] ?: false,
                 todoReminderEnabled = preferences[Keys.TODO_REMINDER_ENABLED] ?: true,
                 reminderSettings = reminderSettings,
                 requireAuthOnLaunch = preferences[Keys.REQUIRE_AUTH_ON_LAUNCH] ?: false,
@@ -171,6 +185,10 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setQuickInputNotificationEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[Keys.NOTIFICATION_QUICK_INPUT] = enabled }
+    }
+
+    suspend fun setLockscreenGuideShown() {
+        context.settingsDataStore.edit { it[Keys.LOCKSCREEN_GUIDE_SHOWN] = true }
     }
 
     suspend fun setTodoReminderEnabled(enabled: Boolean) {
