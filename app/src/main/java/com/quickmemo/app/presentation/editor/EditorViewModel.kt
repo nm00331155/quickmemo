@@ -1,6 +1,7 @@
 // File: app/src/main/java/com/quickmemo/app/presentation/editor/EditorViewModel.kt
 package com.quickmemo.app.presentation.editor
 
+import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import com.quickmemo.app.domain.model.MemoBlock
 import com.quickmemo.app.domain.model.createDefaultMemoBlocks
 import com.quickmemo.app.domain.model.plainTextToHtml
 import com.quickmemo.app.domain.repository.MemoRepository
+import com.quickmemo.app.domain.repository.SettingsRepository
 import com.quickmemo.app.domain.usecase.ManageTrashUseCase
 import com.quickmemo.app.domain.usecase.ObserveSettingsUseCase
 import com.quickmemo.app.domain.usecase.SaveMemoUseCase
@@ -28,6 +30,7 @@ class EditorViewModel @Inject constructor(
     private val memoRepository: MemoRepository,
     private val saveMemoUseCase: SaveMemoUseCase,
     private val manageTrashUseCase: ManageTrashUseCase,
+    private val settingsRepository: SettingsRepository,
     observeSettingsUseCase: ObserveSettingsUseCase,
     private val billingManager: BillingManager,
 ) : ViewModel() {
@@ -40,6 +43,7 @@ class EditorViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
     private val undoRedoManager = UndoRedoManager(maxHistory = 50)
+    val calcHistory = mutableStateListOf<CalcHistoryEntry>()
 
     init {
         viewModelScope.launch {
@@ -74,6 +78,12 @@ class EditorViewModel @Inject constructor(
                         memoToolbarSettings = settings.memoToolbarSettings,
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            settingsRepository.observeTaxRate().collect { rate ->
+                _uiState.update { it.copy(taxRate = rate) }
             }
         }
 

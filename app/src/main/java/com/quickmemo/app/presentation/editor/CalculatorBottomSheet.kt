@@ -27,9 +27,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +56,8 @@ data class CalcHistoryEntry(
 @Composable
 fun CalculatorBottomSheet(
     cursorContextText: String,
+    taxRate: Double,
+    history: SnapshotStateList<CalcHistoryEntry>,
     onInsertExpressionAndResult: (expression: String, result: String) -> Unit,
     onInsertResultOnly: (result: String) -> Unit,
     onDismiss: () -> Unit,
@@ -64,7 +66,6 @@ fun CalculatorBottomSheet(
     var expression by remember { mutableStateOf("") }
     var displayResult by remember { mutableStateOf("0") }
     var hasError by remember { mutableStateOf(false) }
-    val history = remember { mutableStateListOf<CalcHistoryEntry>() }
     val historyListState = rememberLazyListState()
 
     fun formatWithCommas(value: String): String {
@@ -143,6 +144,51 @@ fun CalculatorBottomSheet(
         hasError = false
     }
 
+    fun formatTaxRate(rate: Double): String {
+        return if (rate == rate.toLong().toDouble()) {
+            rate.toLong().toString()
+        } else {
+            rate.toString()
+        }
+    }
+
+    fun applyTaxIncluded() {
+        if (displayResult == "0" || displayResult == "エラー") return
+        try {
+            val current = BigDecimal(displayResult.replace(",", ""))
+            val taxMultiplier = BigDecimal.ONE + BigDecimal.valueOf(taxRate / 100.0)
+            val taxIncluded = current.multiply(taxMultiplier)
+                .setScale(0, java.math.RoundingMode.HALF_UP)
+            val formatted = formatWithCommas(taxIncluded.toPlainString())
+            val taxExpr = "$displayResult×${formatTaxRate(taxRate)}%税込"
+            expression = taxExpr
+            displayResult = formatted
+            hasError = false
+            history.add(CalcHistoryEntry(expression = taxExpr, result = formatted))
+        } catch (_: Exception) {
+            displayResult = "エラー"
+            hasError = true
+        }
+    }
+
+    fun applyTaxExcluded() {
+        if (displayResult == "0" || displayResult == "エラー") return
+        try {
+            val current = BigDecimal(displayResult.replace(",", ""))
+            val taxMultiplier = BigDecimal.ONE + BigDecimal.valueOf(taxRate / 100.0)
+            val taxExcluded = current.divide(taxMultiplier, 0, java.math.RoundingMode.HALF_UP)
+            val formatted = formatWithCommas(taxExcluded.toPlainString())
+            val taxExpr = "$displayResult÷${formatTaxRate(taxRate)}%税抜"
+            expression = taxExpr
+            displayResult = formatted
+            hasError = false
+            history.add(CalcHistoryEntry(expression = taxExpr, result = formatted))
+        } catch (_: Exception) {
+            displayResult = "エラー"
+            hasError = true
+        }
+    }
+
     LaunchedEffect(history.size) {
         if (history.isNotEmpty()) {
             historyListState.animateScrollToItem(history.size - 1)
@@ -170,6 +216,13 @@ fun CalculatorBottomSheet(
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                 )
             }
+
+            Text(
+                text = "税率: ${formatTaxRate(taxRate)}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            )
 
             LazyColumn(
                 state = historyListState,
@@ -266,9 +319,9 @@ fun CalculatorBottomSheet(
 
             val buttonRows = listOf(
                 listOf(
-                    CalcButton("CE", CalcButtonType.FUNCTION),
-                    CalcButton("(", CalcButtonType.OPERATOR),
-                    CalcButton(")", CalcButtonType.OPERATOR),
+                    CalcButton("✕", CalcButtonType.FUNCTION),
+                    CalcButton("税込", CalcButtonType.TAX),
+                    CalcButton("税抜", CalcButtonType.TAX),
                     CalcButton("÷", CalcButtonType.OPERATOR),
                 ),
                 listOf(
@@ -308,14 +361,16 @@ fun CalculatorBottomSheet(
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 when (button.label) {
-                                    "CE" -> backspace()
+                                    "✕" -> backspace()
                                     "=" -> evaluate()
                                     "−" -> appendToExpression("-")
+                                    "税込" -> applyTaxIncluded()
+                                    "税抜" -> applyTaxExcluded()
                                     else -> appendToExpression(button.label)
                                 }
                             },
                             onLongClick = {
-                                if (button.label == "CE") {
+                                if (button.label == "✕") {
                                     clearAll()
                                 }
                             },
@@ -366,6 +421,7 @@ private enum class CalcButtonType {
     OPERATOR,
     FUNCTION,
     EQUALS,
+    TAX,
 }
 
 private data class CalcButton(
@@ -384,8 +440,9 @@ private fun CalcKeyButton(
     val bgColor = when (button.type) {
         CalcButtonType.NUMBER -> MaterialTheme.colorScheme.surfaceContainerHigh
         CalcButtonType.OPERATOR -> Color(0xFF26808F)
-        CalcButtonType.FUNCTION -> Color(0xFF4CAF50)
+        CalcButtonType.FUNCTION -> Color(0xFFE53935)
         CalcButtonType.EQUALS -> Color(0xFF1565C0)
+        CalcButtonType.TAX -> Color(0xFF7B1FA2)
     }
     val textColor = when (button.type) {
         CalcButtonType.NUMBER -> MaterialTheme.colorScheme.onSurface

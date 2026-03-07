@@ -24,4 +24,6 @@ interface SettingsRepository {
     suspend fun setRemoveAdsPurchased(purchased: Boolean)
     suspend fun setLastBackupDateTime(value: String?)
     suspend fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean)
+    fun observeTaxRate(): Flow<Double>
+    suspend fun setTaxRate(rate: Double)
 }

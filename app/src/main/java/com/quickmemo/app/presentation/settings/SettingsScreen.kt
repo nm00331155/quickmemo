@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +57,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -222,6 +226,7 @@ fun SettingsScreen(
                             onShowCharCountChanged = viewModel::setShowCharacterCount,
                             onDateIncludeTimeChanged = viewModel::setInsertCurrentTimeWithDate,
                             onToolbarFeatureChanged = viewModel::setMemoToolbarFeature,
+                            onTaxRateChanged = viewModel::setTaxRate,
                         )
                     }
 
@@ -383,8 +388,24 @@ private fun MemoSettingsTab(
     onShowCharCountChanged: (Boolean) -> Unit,
     onDateIncludeTimeChanged: (Boolean) -> Unit,
     onToolbarFeatureChanged: (MemoToolbarFeature, Boolean) -> Unit,
+    onTaxRateChanged: (Double) -> Unit,
 ) {
     val toolbar = uiState.settings.memoToolbarSettings
+    var taxRateInput by remember(uiState.settings.calculatorTaxRate) {
+        mutableStateOf(formatTaxRateText(uiState.settings.calculatorTaxRate))
+    }
+    var taxRateError by remember { mutableStateOf<String?>(null) }
+
+    fun commitTaxRate() {
+        val parsed = taxRateInput.toDoubleOrNull()
+        if (parsed == null || parsed !in 0.0..100.0) {
+            taxRateError = "0〜100 の範囲で入力してください"
+            return
+        }
+        onTaxRateChanged(parsed)
+        taxRateError = null
+        taxRateInput = formatTaxRateText(parsed)
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -426,6 +447,43 @@ private fun MemoSettingsTab(
                 checked = uiState.settings.insertCurrentTimeWithDate,
                 onCheckedChange = onDateIncludeTimeChanged,
             )
+        }
+
+        item {
+            SectionTitle("電卓")
+            OutlinedTextField(
+                value = taxRateInput,
+                onValueChange = {
+                    taxRateInput = it
+                    taxRateError = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("電卓の税率") },
+                placeholder = { Text("10") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { commitTaxRate() },
+                ),
+                supportingText = {
+                    Text(
+                        taxRateError
+                            ?: "0〜100。現在 ${formatTaxRateText(uiState.settings.calculatorTaxRate)}%",
+                    )
+                },
+                suffix = { Text("%") },
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = { commitTaxRate() }) {
+                    Text("保存")
+                }
+            }
         }
 
         item {
@@ -632,5 +690,13 @@ private fun showHoursPicker(
         0,
         true,
     ).show()
+}
+
+private fun formatTaxRateText(rate: Double): String {
+    return if (rate == rate.toLong().toDouble()) {
+        rate.toLong().toString()
+    } else {
+        rate.toString()
+    }
 }
 

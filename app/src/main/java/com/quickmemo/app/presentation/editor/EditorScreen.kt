@@ -134,6 +134,8 @@ fun EditorScreen(
     var isApplyingSnapshot by remember { mutableStateOf(false) }
 
     var showCalculatorSheet by remember { mutableStateOf(false) }
+    var lastCalcInsertedFlag by remember { mutableStateOf(false) }
+    val calcHistory = viewModel.calcHistory
 
     var showOcrSourceSheet by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -484,6 +486,7 @@ fun EditorScreen(
         if (loadedSignature == signature) return@LaunchedEffect
 
         loadedSignature = signature
+    lastCalcInsertedFlag = false
         isApplyingSnapshot = true
         richTextStates.clear()
 
@@ -969,12 +972,18 @@ fun EditorScreen(
     if (showCalculatorSheet) {
         CalculatorBottomSheet(
             cursorContextText = buildCursorContextText(activeRichTextState()),
+            taxRate = uiState.taxRate,
+            history = calcHistory,
             onInsertExpressionAndResult = { expression, result ->
-                appendTextToEditor("$expression\n=$result")
+                val prefix = if (lastCalcInsertedFlag) "\n" else ""
+                appendTextToEditor("$prefix$expression =$result")
+                lastCalcInsertedFlag = true
                 showCalculatorSheet = false
             },
             onInsertResultOnly = { result ->
-                appendTextToEditor("=$result")
+                val prefix = if (lastCalcInsertedFlag) "\n" else ""
+                appendTextToEditor("$prefix=$result")
+                lastCalcInsertedFlag = true
                 showCalculatorSheet = false
             },
             onDismiss = { showCalculatorSheet = false },

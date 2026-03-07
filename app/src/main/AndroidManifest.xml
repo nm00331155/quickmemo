@@ -128,6 +128,15 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".receiver.NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.quickmemo.app.ACTION_ADD_TODO_FROM_NOTIFICATION" />
+                <action android:name="com.quickmemo.app.ACTION_ADD_MEMO_FROM_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

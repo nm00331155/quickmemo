@@ -12,9 +12,11 @@ import android.os.IBinder
 import android.util.Log
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
 import com.quickmemo.app.MainActivity
 import com.quickmemo.app.R
 import com.quickmemo.app.data.local.database.QuickMemoDatabase
+import com.quickmemo.app.receiver.NotificationActionReceiver
 import com.quickmemo.app.util.QuickMemoIntents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -117,21 +119,57 @@ class QuickMemoForegroundService : Service() {
 
         val summaryText = if (totalCount > 0) {
             "☑ Todo $checkedCount/$totalCount 完了"
+        } else if (pinnedMemo != null) {
+            val title = pinnedMemo.title.trim().ifBlank { "メモ" }
+            "📝 $title"
         } else {
-            "☑ Todoなし"
+            "QuickMemo"
         }
         collapsedView.setTextViewText(R.id.notification_summary, summaryText)
+
+        val lineIds = listOf(
+            R.id.notification_line1,
+            R.id.notification_line2,
+            R.id.notification_line3,
+        )
+
+        if (uncheckedItems.isNotEmpty()) {
+            val displayItems = uncheckedItems.take(3)
+            for (index in lineIds.indices) {
+                if (index < displayItems.size) {
+                    val line = displayItems[index].text.trim().replace("\n", " ")
+                    collapsedView.setTextViewText(lineIds[index], "☐ $line")
+                    collapsedView.setViewVisibility(lineIds[index], android.view.View.VISIBLE)
+                } else {
+                    collapsedView.setViewVisibility(lineIds[index], android.view.View.GONE)
+                }
+            }
+        } else if (pinnedMemo != null) {
+            val memoLines = pinnedMemo.contentPlainText
+                .split("\n")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .take(3)
+
+            for (index in lineIds.indices) {
+                if (index < memoLines.size) {
+                    collapsedView.setTextViewText(lineIds[index], memoLines[index].take(50))
+                    collapsedView.setViewVisibility(lineIds[index], android.view.View.VISIBLE)
+                } else {
+                    collapsedView.setViewVisibility(lineIds[index], android.view.View.GONE)
+                }
+            }
+        } else {
+            collapsedView.setTextViewText(lineIds[0], "タップして開く")
+            collapsedView.setViewVisibility(lineIds[0], android.view.View.VISIBLE)
+            collapsedView.setViewVisibility(lineIds[1], android.view.View.GONE)
+            collapsedView.setViewVisibility(lineIds[2], android.view.View.GONE)
+        }
 
         val memoTitle = pinnedMemo?.title.orEmpty().trim()
         val memoBody = pinnedMemo?.contentPlainText.orEmpty()
             .replace("\n", " ")
             .trim()
-        val memoPreview = if (pinnedMemo != null) {
-            "📝 ${if (memoTitle.isNotBlank()) memoTitle else memoBody.take(30)}"
-        } else {
-            "タップしてQuickMemoを開く"
-        }
-        collapsedView.setTextViewText(R.id.notification_memo_preview, memoPreview)
 
         val expandedView = RemoteViews(packageName, R.layout.notification_expanded)
         expandedView.setTextViewText(R.id.notification_header, "☑ Todo ($checkedCount/$totalCount)")
@@ -186,28 +224,49 @@ class QuickMemoForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val newMemoIntent = Intent(this, MainActivity::class.java).apply {
-            action = QuickMemoIntents.ACTION_OPEN_EDITOR
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        val newMemoPending = PendingIntent.getActivity(
-            this,
-            101,
-            newMemoIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val remoteInputTodo = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_ADD_TODO)
+            .setLabel("Todoを入力...")
+            .build()
 
-        val newTodoIntent = Intent(this, MainActivity::class.java).apply {
-            action = QuickMemoIntents.ACTION_OPEN_TODO
-            putExtra(QuickMemoIntents.EXTRA_ADD_TODO, true)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        val addTodoBroadcastIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_ADD_TODO
         }
-        val newTodoPending = PendingIntent.getActivity(
+        val addTodoPending = PendingIntent.getBroadcast(
             this,
-            102,
-            newTodoIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            200,
+            addTodoBroadcastIntent,
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val addTodoAction = NotificationCompat.Action.Builder(
+            0,
+            "Todo追加",
+            addTodoPending,
+        )
+            .addRemoteInput(remoteInputTodo)
+            .setAllowGeneratedReplies(false)
+            .build()
+
+        val remoteInputMemo = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_ADD_MEMO)
+            .setLabel("メモを入力...")
+            .build()
+
+        val addMemoBroadcastIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_ADD_MEMO
+        }
+        val addMemoPending = PendingIntent.getBroadcast(
+            this,
+            201,
+            addMemoBroadcastIntent,
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val addMemoAction = NotificationCompat.Action.Builder(
+            0,
+            "メモ追加",
+            addMemoPending,
+        )
+            .addRemoteInput(remoteInputMemo)
+            .setAllowGeneratedReplies(false)
+            .build()
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_memo)
@@ -219,8 +278,8 @@ class QuickMemoForegroundService : Service() {
             .setCustomBigContentView(expandedView)
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setContentIntent(openAppPending)
-            .addAction(0, getString(R.string.quick_new_memo), newMemoPending)
-            .addAction(0, getString(R.string.quick_new_todo), newTodoPending)
+                .addAction(addTodoAction)
+                .addAction(addMemoAction)
             .build()
     }
 

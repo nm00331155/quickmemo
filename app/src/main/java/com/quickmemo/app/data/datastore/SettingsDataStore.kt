@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -68,7 +69,21 @@ class SettingsDataStore @Inject constructor(
         val MEMO_TOOLBAR_OCR = booleanPreferencesKey("memo_toolbar_ocr")
         val MEMO_TOOLBAR_SHARE = booleanPreferencesKey("memo_toolbar_share")
         val MEMO_TOOLBAR_FULL_COPY = booleanPreferencesKey("memo_toolbar_full_copy")
+
+        val CALCULATOR_TAX_RATE = doublePreferencesKey("calculator_tax_rate")
     }
+
+    val taxRateFlow: Flow<Double> = context.settingsDataStore.data
+        .catch { throwable ->
+            if (throwable is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw throwable
+            }
+        }
+        .map { preferences ->
+            (preferences[Keys.CALCULATOR_TAX_RATE] ?: 10.0).coerceIn(0.0, 100.0)
+        }
 
     val settingsFlow: Flow<AppSettings> = context.settingsDataStore.data
         .catch { throwable ->
@@ -130,6 +145,7 @@ class SettingsDataStore @Inject constructor(
                 removeAdsPurchased = preferences[Keys.REMOVE_ADS_PURCHASED] ?: false,
                 lastBackupDateTime = preferences[Keys.LAST_BACKUP_DATETIME],
                 memoToolbarSettings = toolbarSettings,
+                calculatorTaxRate = (preferences[Keys.CALCULATOR_TAX_RATE] ?: 10.0).coerceIn(0.0, 100.0),
             )
         }
 
@@ -216,6 +232,12 @@ class SettingsDataStore @Inject constructor(
                 MemoToolbarFeature.SHARE -> preferences[Keys.MEMO_TOOLBAR_SHARE] = enabled
                 MemoToolbarFeature.FULL_COPY -> preferences[Keys.MEMO_TOOLBAR_FULL_COPY] = enabled
             }
+        }
+    }
+
+    suspend fun setTaxRate(rate: Double) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[Keys.CALCULATOR_TAX_RATE] = rate.coerceIn(0.0, 100.0)
         }
     }
 

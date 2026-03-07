@@ -109,6 +109,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setMemoToolbarFeature(feature, enabled) }
     }
 
+    fun setTaxRate(rate: Double) {
+        viewModelScope.launch { settingsRepository.setTaxRate(rate) }
+    }
+
     fun setTodoTabName(tabId: Int, name: String) {
         viewModelScope.launch {
             todoRepository.setTabName(tabId, name.take(10))
@@ -294,6 +298,10 @@ class SettingsViewModel @Inject constructor(
             MemoToolbarFeature.FULL_COPY,
             settingsObject.optBoolean("memo_toolbar_full_copy", true),
         )
+
+        settingsRepository.setTaxRate(
+            settingsObject.optDouble("calculator_tax_rate", 10.0),
+        )
     }
 }
 
@@ -404,5 +412,6 @@ private fun com.quickmemo.app.domain.model.AppSettings.toBackupJson(): JSONObjec
         put("memo_toolbar_ocr", memoToolbarSettings.ocr)
         put("memo_toolbar_share", memoToolbarSettings.share)
         put("memo_toolbar_full_copy", memoToolbarSettings.fullCopy)
+        put("calculator_tax_rate", calculatorTaxRate)
     }
 }

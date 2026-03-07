@@ -34,4 +34,5 @@ data class AppSettings(
     val removeAdsPurchased: Boolean = false,
     val lastBackupDateTime: String? = null,
     val memoToolbarSettings: MemoToolbarSettings = MemoToolbarSettings(),
+    val calculatorTaxRate: Double = 10.0,
 )

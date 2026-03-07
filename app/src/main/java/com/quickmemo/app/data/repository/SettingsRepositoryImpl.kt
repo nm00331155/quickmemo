@@ -75,4 +75,12 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean) {
         dataStore.setMemoToolbarFeature(feature, enabled)
     }
+
+    override fun observeTaxRate(): Flow<Double> {
+        return dataStore.taxRateFlow
+    }
+
+    override suspend fun setTaxRate(rate: Double) {
+        dataStore.setTaxRate(rate)
+    }
 }
