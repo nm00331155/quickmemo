@@ -1,6 +1,7 @@
 package com.quickmemo.app.di
 
 import android.content.Context
+import com.quickmemo.app.data.local.dao.DictionaryDao
 import com.quickmemo.app.data.local.dao.MemoDao
 import com.quickmemo.app.data.local.dao.TodoDao
 import com.quickmemo.app.data.local.database.QuickMemoDatabase
@@ -28,4 +29,7 @@ object DatabaseModule {
 
     @Provides
     fun provideTodoDao(database: QuickMemoDatabase): TodoDao = database.todoDao()
+
+    @Provides
+    fun provideDictionaryDao(database: QuickMemoDatabase): DictionaryDao = database.dictionaryDao()
 }

@@ -152,6 +152,14 @@ fun CalculatorBottomSheet(
         }
     }
 
+    fun normalizeInsertText(source: String): String {
+        return source
+            .replace("&times;", "×")
+            .replace("&divide;", "÷")
+            .replace("&equals;", "=")
+            .replace("&comma;", ",")
+    }
+
     fun applyTaxIncluded() {
         if (displayResult == "0" || displayResult == "エラー") return
         try {
@@ -391,7 +399,10 @@ fun CalculatorBottomSheet(
                 TextButton(
                     onClick = {
                         if (!hasError && displayResult != "0") {
-                            onInsertExpressionAndResult(expression, displayResult)
+                            onInsertExpressionAndResult(
+                                normalizeInsertText(expression),
+                                normalizeInsertText(displayResult),
+                            )
                         }
                     },
                     modifier = Modifier.weight(1f),
@@ -403,7 +414,7 @@ fun CalculatorBottomSheet(
                 TextButton(
                     onClick = {
                         if (!hasError && displayResult != "0") {
-                            onInsertResultOnly(displayResult)
+                            onInsertResultOnly(normalizeInsertText(displayResult))
                         }
                     },
                     modifier = Modifier.weight(1f),

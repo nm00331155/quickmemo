@@ -100,8 +100,6 @@ fun PremiumScreen(
                 listOf(
                     "広告の完全除去",
                     "翻訳機能",
-                    "自動バックアップ",
-                    "カスタムテーマ",
                 ),
             ) { feature ->
                 Text(
@@ -111,41 +109,10 @@ fun PremiumScreen(
             }
 
             item {
-                PlanCard(
-                    title = "月額プラン",
-                    price = "¥300/月",
-                    purchased = purchaseState.isPro,
-                    onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.PRO_MONTHLY) }
-                    },
-                )
-            }
-
-            item {
-                PlanCard(
-                    title = "年額プラン",
-                    price = "¥2,400/年",
-                    subLabel = "お得! 月あたり¥200",
-                    purchased = purchaseState.isPro,
-                    onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.PRO_YEARLY) }
-                    },
-                )
-            }
-
-            item {
-                Text(
-                    text = "個別購入",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-
-            item {
                 IndividualPurchaseRow(
                     label = "広告除去のみ",
-                    price = "¥500",
-                    purchased = !purchaseState.shouldShowAds,
+                    price = "¥300",
+                    purchased = purchaseState.isAdFree,
                     onPurchase = {
                         activity?.let { viewModel.purchase(it, BillingManager.Products.REMOVE_ADS) }
                     },
@@ -154,22 +121,11 @@ fun PremiumScreen(
 
             item {
                 IndividualPurchaseRow(
-                    label = "翻訳パック",
-                    price = "¥400",
+                    label = "翻訳機能の解放",
+                    price = "¥300",
                     purchased = purchaseState.hasTranslation,
                     onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.TRANSLATE_PACK) }
-                    },
-                )
-            }
-
-            item {
-                IndividualPurchaseRow(
-                    label = "全部入り",
-                    price = "¥1,500",
-                    purchased = purchaseState.hasAllInOne,
-                    onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.ALL_IN_ONE) }
+                        activity?.let { viewModel.purchase(it, BillingManager.Products.UNLOCK_TRANSLATION) }
                     },
                 )
             }

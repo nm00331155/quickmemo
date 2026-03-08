@@ -10,7 +10,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import com.quickmemo.app.MainActivity
@@ -35,20 +34,11 @@ class QuickMemoForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_REFRESH -> {
-                serviceScope.launch {
-                    if (hasStartedForeground) {
-                        refreshNotification()
-                    } else {
-                        startWithNotification()
-                    }
-                }
-            }
+        ensureForegroundStarted()
 
-            else -> {
-                serviceScope.launch { startWithNotification() }
-            }
+        when (intent?.action) {
+            ACTION_REFRESH -> serviceScope.launch { refreshNotification() }
+            else -> serviceScope.launch { refreshNotification() }
         }
         return START_STICKY
     }
@@ -61,19 +51,21 @@ class QuickMemoForegroundService : Service() {
         serviceScope.cancel()
     }
 
-    private suspend fun startWithNotification() {
-        val notification = buildNotification()
+    private fun ensureForegroundStarted() {
+        if (hasStartedForeground) return
+
+        val startupNotification = buildStartupNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
-                notification,
+                startupNotification,
                 android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
             )
         } else {
-            startForeground(NOTIFICATION_ID, notification)
+            startForeground(NOTIFICATION_ID, startupNotification)
         }
         hasStartedForeground = true
-        Log.d(TAG, "ForegroundService started with VISIBILITY_PUBLIC notification")
+        Log.d(TAG, "ForegroundService started with startup notification")
     }
 
     private suspend fun refreshNotification() {
@@ -81,6 +73,20 @@ class QuickMemoForegroundService : Service() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
         Log.d(TAG, "Notification refreshed")
+    }
+
+    private fun buildStartupNotification(): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_memo)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentTitle("☑ Todoを準備中")
+            .setContentText("QuickMemoの通知を更新しています")
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .build()
     }
 
     private suspend fun buildNotification(): Notification {
@@ -106,66 +112,45 @@ class QuickMemoForegroundService : Service() {
             TAG,
             "Building notification: unchecked=${uncheckedItems.size}, checked=$checkedCount, total=$totalCount",
         )
-
-        val collapsedView = RemoteViews(packageName, R.layout.notification_collapsed)
-
-        val summaryText = if (totalCount > 0) {
-            "☑ Todo $checkedCount/$totalCount 完了"
+        val titleText = "☑ Todo $checkedCount/$totalCount 完了"
+        val previewItems = uncheckedItems
+            .asSequence()
+            .map { normalizeTodoLine(it.text) }
+            .filter { it.isNotBlank() }
+            .take(3)
+            .toList()
+        val previewText = if (previewItems.isNotEmpty()) {
+            previewItems.joinToString(separator = "、") { "□ $it" }
+        } else if (checkedCount > 0) {
+            "すべて完了！"
         } else {
-            "☑ Todoなし"
+            "未完了Todoはありません"
         }
-        collapsedView.setTextViewText(R.id.notification_summary, summaryText)
+        val moreText = if (uncheckedItems.size > 3) " 他${uncheckedItems.size - 3}件" else ""
+        val contentText = "$previewText$moreText"
 
-        val lineIds = listOf(
-            R.id.notification_line1,
-            R.id.notification_line2,
-            R.id.notification_line3,
-        )
-
-        val collapsedItems = uncheckedItems.take(3)
-        for (index in lineIds.indices) {
-            if (index < collapsedItems.size) {
-                val line = collapsedItems[index].text.trim().replace("\n", " ")
-                collapsedView.setTextViewText(lineIds[index], "☐ $line")
-                collapsedView.setViewVisibility(lineIds[index], android.view.View.VISIBLE)
-            } else {
-                collapsedView.setViewVisibility(lineIds[index], android.view.View.GONE)
-            }
-        }
-
-        val expandedView = RemoteViews(packageName, R.layout.notification_expanded)
-        expandedView.setTextViewText(R.id.notification_header, "☑ Todo ($checkedCount/$totalCount 完了)")
-
-        val todoTextIds = listOf(
-            R.id.notification_todo_1,
-            R.id.notification_todo_2,
-            R.id.notification_todo_3,
-            R.id.notification_todo_4,
-            R.id.notification_todo_5,
-        )
-        val expandedItems = uncheckedItems.take(5)
-
-        for (index in todoTextIds.indices) {
-            if (index < expandedItems.size) {
-                val itemText = expandedItems[index].text.trim().replace("\n", " ")
-                expandedView.setTextViewText(todoTextIds[index], "☐ $itemText")
-                expandedView.setViewVisibility(todoTextIds[index], android.view.View.VISIBLE)
-            } else {
-                expandedView.setViewVisibility(todoTextIds[index], android.view.View.GONE)
-            }
-        }
-
-        expandedView.setViewVisibility(R.id.notification_pinned_memo, android.view.View.GONE)
-
-        val remainingCount = uncheckedItems.size - 5
-        if (remainingCount > 0) {
-            expandedView.setTextViewText(R.id.notification_footer, "他 ${remainingCount}件 → タップして全件表示")
-        } else if (uncheckedItems.isEmpty()) {
-            expandedView.setTextViewText(R.id.notification_footer, "すべて完了！ →")
+        val inboxStyle = NotificationCompat.InboxStyle()
+            .setBigContentTitle(titleText)
+        val expandedItems = uncheckedItems
+            .asSequence()
+            .map { normalizeTodoLine(it.text) }
+            .filter { it.isNotBlank() }
+            .take(8)
+            .toList()
+        if (expandedItems.isEmpty()) {
+            inboxStyle.addLine(
+                if (checkedCount > 0) {
+                    "すべて完了！"
+                } else {
+                    "未完了Todoはありません"
+                },
+            )
         } else {
-            expandedView.setTextViewText(R.id.notification_footer, "タップして開く →")
+            expandedItems.forEach { inboxStyle.addLine("□ $it") }
         }
-        expandedView.setViewVisibility(R.id.notification_footer, android.view.View.VISIBLE)
+        if (uncheckedItems.size > 8) {
+            inboxStyle.setSummaryText("他${uncheckedItems.size - 8}件")
+        }
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             action = QuickMemoIntents.ACTION_OPEN_TODO
@@ -217,9 +202,11 @@ class QuickMemoForegroundService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setCustomContentView(collapsedView)
-            .setCustomBigContentView(expandedView)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setContentTitle(titleText)
+            .setContentText(contentText)
+            .setStyle(inboxStyle)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(openAppPending)
             .addAction(addTodoAction)
             .addAction(0, "メモを編集", openEditorPending)
@@ -247,6 +234,13 @@ class QuickMemoForegroundService : Service() {
                 "NotificationChannel created: importance=DEFAULT, sound=null, lockscreenVisibility=PUBLIC",
             )
         }
+    }
+
+    private fun normalizeTodoLine(source: String): String {
+        return source
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     companion object {

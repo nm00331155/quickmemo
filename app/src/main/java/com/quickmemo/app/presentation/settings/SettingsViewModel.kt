@@ -206,6 +206,10 @@ class SettingsViewModel @Inject constructor(
         billingManager.launchPurchase(activity)
     }
 
+    fun purchaseTranslation(activity: Activity) {
+        billingManager.launchPurchase(activity, BillingManager.Products.UNLOCK_TRANSLATION)
+    }
+
     fun refreshPurchases() {
         billingManager.queryPurchases()
     }

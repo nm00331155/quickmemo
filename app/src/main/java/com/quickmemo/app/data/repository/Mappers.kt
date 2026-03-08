@@ -2,9 +2,11 @@ package com.quickmemo.app.data.repository
 
 import com.quickmemo.app.data.local.entity.MemoEntity
 import com.quickmemo.app.data.local.entity.TodoItemEntity
+import com.quickmemo.app.data.local.entity.DictionaryEntryEntity
 import com.quickmemo.app.domain.model.createDefaultMemoBlocks
 import com.quickmemo.app.domain.model.decodeMemoBlocks
 import com.quickmemo.app.domain.model.encodeMemoBlocks
+import com.quickmemo.app.domain.model.DictionaryEntry
 import com.quickmemo.app.domain.model.Memo
 import com.quickmemo.app.domain.model.TodoItem
 
@@ -78,5 +80,23 @@ fun TodoItem.toEntity(): TodoItemEntity {
         sortOrder = sortOrder,
         createdAt = createdAt,
         checkedAt = checkedAt,
+    )
+}
+
+fun DictionaryEntryEntity.toDomain(): DictionaryEntry {
+    return DictionaryEntry(
+        id = id,
+        label = label,
+        content = content,
+        sortOrder = sortOrder,
+    )
+}
+
+fun DictionaryEntry.toEntity(): DictionaryEntryEntity {
+    return DictionaryEntryEntity(
+        id = id,
+        label = label,
+        content = content,
+        sortOrder = sortOrder,
     )
 }

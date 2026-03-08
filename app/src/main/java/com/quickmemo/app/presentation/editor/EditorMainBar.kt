@@ -16,7 +16,6 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +36,7 @@ fun EditorMainBar(
     onRedo: () -> Unit,
     onRunOcr: () -> Unit,
     onOpenCalculator: () -> Unit,
+    onOpenDictionary: () -> Unit,
     onOpenTranslation: () -> Unit,
     onPickDate: () -> Unit,
     onPickTime: () -> Unit,
@@ -44,6 +44,7 @@ fun EditorMainBar(
     showUndoRedo: Boolean,
     showOcr: Boolean,
     showCalculator: Boolean,
+    showDictionary: Boolean,
     showTranslation: Boolean,
     showDateTimeInsert: Boolean,
     canUndo: Boolean,
@@ -104,8 +105,10 @@ fun EditorMainBar(
                     onClick = onRunOcr,
                     icon = {
                         Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "ocr",
+                            painter = painterResource(id = R.drawable.ic_ocr_scan),
+                            contentDescription = "OCR テキスト認識",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
                     },
                 )
@@ -118,6 +121,20 @@ fun EditorMainBar(
                         Icon(
                             imageVector = Icons.Default.Calculate,
                             contentDescription = "calculator",
+                        )
+                    },
+                )
+            }
+
+            if (showDictionary) {
+                ToolbarActionButton(
+                    onClick = onOpenDictionary,
+                    icon = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_dictionary),
+                            contentDescription = "単語辞書",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface,
                         )
                     },
                 )

@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.SpanStyle
@@ -107,15 +108,7 @@ fun EditorFormatBar(
                 FormatButton(label = "蛍", selected = isHighlightSelected) {
                     val state = richTextState ?: return@FormatButton
                     val style = SpanStyle(background = highlightColor)
-                    if (!state.selection.collapsed) {
-                        if (isHighlightSelected) {
-                            state.removeSpanStyle(style)
-                        } else {
-                            state.addSpanStyle(style)
-                        }
-                    } else {
-                        state.toggleSpanStyle(style)
-                    }
+                    state.toggleSpanStyle(style)
                 }
             }
 
@@ -174,6 +167,7 @@ private fun FormatButton(
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
         },
         modifier = Modifier
+            .focusProperties { canFocus = false }
             .clickable(onClick = onClick),
     ) {
         Box(

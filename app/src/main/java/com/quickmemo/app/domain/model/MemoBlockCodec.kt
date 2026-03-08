@@ -1,6 +1,8 @@
 // File: app/src/main/java/com/quickmemo/app/domain/model/MemoBlockCodec.kt
 package com.quickmemo.app.domain.model
 
+import android.os.Build
+import android.text.Html
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -204,15 +206,19 @@ fun plainTextToHtml(source: String): String {
 fun htmlToPlainText(html: String): String {
     if (html.isBlank()) return ""
 
-    return html
-        .replace(Regex("(?i)<br\\s*/?>"), "\n")
-        .replace(Regex("(?i)</p>"), "\n")
-        .replace(Regex("(?i)<p[^>]*>"), "")
-        .replace(Regex("<[^>]+>"), "")
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
+    val normalizedHtml = html
+        .replace(Regex("(?i)<br\\s*/?>"), "<br/>")
+        .replace(Regex("(?i)</p>"), "</p>\n")
+
+    val spanned = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        Html.fromHtml(normalizedHtml, Html.FROM_HTML_MODE_COMPACT)
+    } else {
+        @Suppress("DEPRECATION")
+        Html.fromHtml(normalizedHtml)
+    }
+
+    return spanned.toString()
+        .replace('\u00A0', ' ')
         .trim()
 }
 

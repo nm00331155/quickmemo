@@ -3,16 +3,11 @@ package com.quickmemo.app.billing
 import com.android.billingclient.api.ProductDetails
 
 data class PurchaseState(
-    val isPro: Boolean = false,
     val isAdFree: Boolean = false,
-    val hasTranslatePack: Boolean = false,
-    val hasAllInOne: Boolean = false,
+    val hasTranslation: Boolean = false,
 ) {
     val shouldShowAds: Boolean
-        get() = !isPro && !isAdFree && !hasAllInOne
-
-    val hasTranslation: Boolean
-        get() = isPro || hasTranslatePack || hasAllInOne
+        get() = !isAdFree
 }
 
 data class BillingState(

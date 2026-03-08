@@ -209,6 +209,9 @@ fun SettingsScreen(
                             onPurchaseRemoveAds = {
                                 activity?.let { viewModel.purchaseRemoveAds(it) }
                             },
+                            onPurchaseTranslation = {
+                                activity?.let { viewModel.purchaseTranslation(it) }
+                            },
                             onOpenContact = {
                                 val intent = Intent(Intent.ACTION_SENDTO).apply {
                                     data = Uri.parse("mailto:support@quickmemo.app")
@@ -316,6 +319,7 @@ private fun GeneralSettingsTab(
     onOpenTrash: () -> Unit,
     onOpenPremium: () -> Unit,
     onPurchaseRemoveAds: () -> Unit,
+    onPurchaseTranslation: () -> Unit,
     onOpenContact: () -> Unit,
 ) {
     LazyColumn(
@@ -369,7 +373,12 @@ private fun GeneralSettingsTab(
         item {
             SectionTitle("課金")
             TextButton(onClick = onOpenPremium) { Text("プレミアム機能") }
-            TextButton(onClick = onPurchaseRemoveAds) { Text("広告非表示を購入") }
+            if (uiState.billingState.purchaseState.shouldShowAds) {
+                TextButton(onClick = onPurchaseRemoveAds) { Text("広告非表示を購入") }
+            }
+            if (!uiState.billingState.purchaseState.hasTranslation) {
+                TextButton(onClick = onPurchaseTranslation) { Text("翻訳機能の解放") }
+            }
         }
 
         item {

@@ -91,14 +91,6 @@ class BillingManager @Inject constructor(
             .newBuilder()
             .setProductDetails(details)
 
-        if (productId == Products.PRO_MONTHLY || productId == Products.PRO_YEARLY) {
-            val offerToken = details.subscriptionOfferDetails
-                ?.firstOrNull()
-                ?.offerToken
-                ?: return
-            detailsParamsBuilder.setOfferToken(offerToken)
-        }
-
         _state.value = _state.value.copy(
             isPurchaseInProgress = true,
             lastErrorMessage = null,
@@ -149,24 +141,14 @@ class BillingManager @Inject constructor(
             productType = BillingClient.ProductType.INAPP,
             productIds = listOf(
                 Products.REMOVE_ADS,
-                Products.TRANSLATE_PACK,
-                Products.ALL_IN_ONE,
+                Products.UNLOCK_TRANSLATION,
             ),
         ) { detailsMap ->
             _state.value = _state.value.copy(
                 inAppProductDetails = detailsMap,
                 productDetails = detailsMap[Products.REMOVE_ADS],
+                subscriptionProductDetails = emptyMap(),
             )
-        }
-
-        queryProductDetailsByType(
-            productType = BillingClient.ProductType.SUBS,
-            productIds = listOf(
-                Products.PRO_MONTHLY,
-                Products.PRO_YEARLY,
-            ),
-        ) { detailsMap ->
-            _state.value = _state.value.copy(subscriptionProductDetails = detailsMap)
         }
     }
 
@@ -215,13 +197,9 @@ class BillingManager @Inject constructor(
 
     private fun updatePurchaseState() {
         val allPurchases = latestInAppPurchases + latestSubPurchases
-        val hasPro = hasPurchased(allPurchases, Products.PRO_MONTHLY) ||
-            hasPurchased(allPurchases, Products.PRO_YEARLY)
         val purchaseState = PurchaseState(
-            isPro = hasPro,
             isAdFree = hasPurchased(allPurchases, Products.REMOVE_ADS),
-            hasTranslatePack = hasPurchased(allPurchases, Products.TRANSLATE_PACK),
-            hasAllInOne = hasPurchased(allPurchases, Products.ALL_IN_ONE),
+            hasTranslation = hasPurchased(allPurchases, Products.UNLOCK_TRANSLATION),
         )
 
         val isPurchased = !purchaseState.shouldShowAds
@@ -257,14 +235,12 @@ class BillingManager @Inject constructor(
     }
 
     object Products {
-        const val PRO_MONTHLY = "pro_monthly"
-        const val PRO_YEARLY = "pro_yearly"
         const val REMOVE_ADS = "remove_ads"
-        const val TRANSLATE_PACK = "translate_pack"
-        const val ALL_IN_ONE = "all_in_one"
+        const val UNLOCK_TRANSLATION = "unlock_translation"
     }
 
     companion object {
         const val PRODUCT_ID_REMOVE_ADS = Products.REMOVE_ADS
+        const val PRODUCT_ID_UNLOCK_TRANSLATION = Products.UNLOCK_TRANSLATION
     }
 }

@@ -241,4 +241,19 @@ object DatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `dictionary_entries` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `label` TEXT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `sortOrder` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+        }
+    }
 }

@@ -1,15 +1,18 @@
 // File: app/src/main/java/com/quickmemo/app/presentation/editor/EditorViewModel.kt
 package com.quickmemo.app.presentation.editor
 
+import android.app.Activity
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.quickmemo.app.billing.BillingManager
+import com.quickmemo.app.domain.model.DictionaryEntry
 import com.quickmemo.app.domain.model.Memo
 import com.quickmemo.app.domain.model.MemoBlock
 import com.quickmemo.app.domain.model.createDefaultMemoBlocks
 import com.quickmemo.app.domain.model.plainTextToHtml
+import com.quickmemo.app.domain.repository.DictionaryRepository
 import com.quickmemo.app.domain.repository.MemoRepository
 import com.quickmemo.app.domain.repository.SettingsRepository
 import com.quickmemo.app.domain.usecase.ManageTrashUseCase
@@ -27,6 +30,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    private val dictionaryRepository: DictionaryRepository,
     private val memoRepository: MemoRepository,
     private val saveMemoUseCase: SaveMemoUseCase,
     private val manageTrashUseCase: ManageTrashUseCase,
@@ -42,6 +46,8 @@ class EditorViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
+    private val _dictionaryEntries = MutableStateFlow<List<DictionaryEntry>>(emptyList())
+    val dictionaryEntries: StateFlow<List<DictionaryEntry>> = _dictionaryEntries.asStateFlow()
     private val undoRedoManager = UndoRedoManager(maxHistory = 50)
     val calcHistory = mutableStateListOf<CalcHistoryEntry>()
 
@@ -53,6 +59,12 @@ class EditorViewModel @Inject constructor(
                         hasTranslation = billingState.purchaseState.hasTranslation,
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            dictionaryRepository.observeEntries().collect { entries ->
+                _dictionaryEntries.value = entries
             }
         }
 
@@ -206,6 +218,28 @@ class EditorViewModel @Inject constructor(
 
     fun setUndoRedoRestoring(value: Boolean) {
         undoRedoManager.setRestoring(value)
+    }
+
+    fun addDictionaryEntry(label: String, content: String) {
+        viewModelScope.launch {
+            dictionaryRepository.addEntry(label = label, content = content)
+        }
+    }
+
+    fun updateDictionaryEntry(entry: DictionaryEntry) {
+        viewModelScope.launch {
+            dictionaryRepository.updateEntry(entry)
+        }
+    }
+
+    fun deleteDictionaryEntry(entry: DictionaryEntry) {
+        viewModelScope.launch {
+            dictionaryRepository.deleteEntry(entry)
+        }
+    }
+
+    fun purchaseTranslation(activity: Activity) {
+        billingManager.launchPurchase(activity, BillingManager.Products.UNLOCK_TRANSLATION)
     }
 
     private fun publishUndoRedoAvailability() {

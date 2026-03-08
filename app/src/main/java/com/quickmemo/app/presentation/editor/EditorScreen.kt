@@ -1,6 +1,7 @@
 package com.quickmemo.app.presentation.editor
 
 import android.Manifest
+import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
@@ -84,6 +85,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
+import com.quickmemo.app.domain.model.DictionaryEntry
 import com.quickmemo.app.domain.model.MemoBlock
 import com.quickmemo.app.domain.model.createDefaultMemoBlocks
 import com.quickmemo.app.domain.model.decodeMemoBlocks
@@ -118,8 +120,10 @@ fun EditorScreen(
     viewModel: EditorViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val dictionaryEntries by viewModel.dictionaryEntries.collectAsStateWithLifecycle()
     val editorBackgroundColor = memoCardBackgroundColor(uiState.colorLabel)
     val context = LocalContext.current
+    val activity = context as? Activity
     val lifecycleOwner = LocalLifecycleOwner.current
     val clipboardManager = LocalClipboardManager.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -136,6 +140,12 @@ fun EditorScreen(
     var showCalculatorSheet by remember { mutableStateOf(false) }
     var lastCalcInsertedFlag by remember { mutableStateOf(false) }
     val calcHistory = viewModel.calcHistory
+    var showDictionarySheet by remember { mutableStateOf(false) }
+    var showDictionaryEditorDialog by remember { mutableStateOf(false) }
+    var dictionaryEditTarget by remember { mutableStateOf<DictionaryEntry?>(null) }
+    var dictionaryDeleteTarget by remember { mutableStateOf<DictionaryEntry?>(null) }
+    var dictionaryLabelInput by remember { mutableStateOf("") }
+    var dictionaryContentInput by remember { mutableStateOf("") }
 
     var showOcrSourceSheet by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -146,6 +156,7 @@ fun EditorScreen(
     var isTranslationLoading by remember { mutableStateOf(false) }
     var translationResult by remember { mutableStateOf<TranslationResult?>(null) }
     var showTranslationResultDialog by remember { mutableStateOf(false) }
+    var showTranslationPurchaseDialog by remember { mutableStateOf(false) }
 
     var showTtsDialog by remember { mutableStateOf(false) }
     var ttsSpeechRate by remember { mutableStateOf(1.0f) }
@@ -233,6 +244,45 @@ fun EditorScreen(
             return
         }
         targetState.addTextAfterSelection(text)
+    }
+
+    fun openAddDictionaryDialog() {
+        dictionaryEditTarget = null
+        dictionaryLabelInput = ""
+        dictionaryContentInput = ""
+        showDictionaryEditorDialog = true
+    }
+
+    fun openEditDictionaryDialog(entry: DictionaryEntry) {
+        dictionaryEditTarget = entry
+        dictionaryLabelInput = entry.label
+        dictionaryContentInput = entry.content
+        showDictionaryEditorDialog = true
+    }
+
+    fun saveDictionaryEntry() {
+        val label = dictionaryLabelInput.trim()
+        val content = dictionaryContentInput.trim()
+        if (label.isBlank() || content.isBlank()) {
+            scope.launch {
+                snackbarHostState.showSnackbar("ラベルと内容を入力してください")
+            }
+            return
+        }
+
+        val editing = dictionaryEditTarget
+        if (editing == null) {
+            viewModel.addDictionaryEntry(label = label, content = content)
+        } else {
+            viewModel.updateDictionaryEntry(
+                editing.copy(
+                    label = label,
+                    content = content,
+                ),
+            )
+        }
+        showDictionaryEditorDialog = false
+        dictionaryEditTarget = null
     }
 
     fun copyFullTextToClipboard() {
@@ -367,9 +417,7 @@ fun EditorScreen(
 
     fun runTranslationFlow(sourceText: String, insertImmediately: Boolean) {
         if (!uiState.hasTranslation) {
-            scope.launch {
-                snackbarHostState.showSnackbar("翻訳機能はProまたは翻訳パックで利用できます")
-            }
+            showTranslationPurchaseDialog = true
             return
         }
 
@@ -516,6 +564,12 @@ fun EditorScreen(
             .collect { snapshot ->
                 viewModel.saveUndoSnapshot(snapshot)
             }
+    }
+
+    LaunchedEffect(uiState.hasTranslation) {
+        if (uiState.hasTranslation) {
+            showTranslationPurchaseDialog = false
+        }
     }
 
     LaunchedEffect(ttsInitStatus, ttsEngine) {
@@ -689,6 +743,9 @@ fun EditorScreen(
                     onOpenCalculator = {
                         showCalculatorSheet = true
                     },
+                    onOpenDictionary = {
+                        showDictionarySheet = true
+                    },
                     onOpenTranslation = {
                         runTranslationFlow(
                             sourceText = currentPlainText,
@@ -715,6 +772,7 @@ fun EditorScreen(
                     showUndoRedo = uiState.memoToolbarSettings.undoRedo,
                     showOcr = uiState.memoToolbarSettings.ocr,
                     showCalculator = uiState.memoToolbarSettings.calculator,
+                    showDictionary = true,
                     showTranslation = uiState.memoToolbarSettings.translation,
                     showDateTimeInsert = uiState.memoToolbarSettings.dateTimeInsert,
                     canUndo = uiState.canUndo,
@@ -917,6 +975,128 @@ fun EditorScreen(
         }
     }
 
+    if (showDictionarySheet) {
+        DictionaryBottomSheet(
+            entries = dictionaryEntries,
+            onInsert = { content ->
+                appendTextToEditor(content)
+                showDictionarySheet = false
+            },
+            onAddNew = {
+                showDictionarySheet = false
+                openAddDictionaryDialog()
+            },
+            onEdit = { entry ->
+                showDictionarySheet = false
+                openEditDictionaryDialog(entry)
+            },
+            onDelete = { entry ->
+                showDictionarySheet = false
+                dictionaryDeleteTarget = entry
+            },
+            onDismiss = { showDictionarySheet = false },
+        )
+    }
+
+    if (showDictionaryEditorDialog) {
+        val isEditing = dictionaryEditTarget != null
+        AlertDialog(
+            onDismissRequest = {
+                showDictionaryEditorDialog = false
+                dictionaryEditTarget = null
+            },
+            title = {
+                Text(if (isEditing) "辞書を編集" else "辞書を追加")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = dictionaryLabelInput,
+                        onValueChange = { dictionaryLabelInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("ラベル") },
+                    )
+                    OutlinedTextField(
+                        value = dictionaryContentInput,
+                        onValueChange = { dictionaryContentInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                        label = { Text("内容") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = ::saveDictionaryEntry) {
+                    Text(if (isEditing) "更新" else "追加")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDictionaryEditorDialog = false
+                        dictionaryEditTarget = null
+                    },
+                ) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
+
+    dictionaryDeleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { dictionaryDeleteTarget = null },
+            title = { Text("辞書を削除") },
+            text = { Text("「${target.label}」を削除しますか？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteDictionaryEntry(target)
+                        dictionaryDeleteTarget = null
+                    },
+                ) {
+                    Text("削除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dictionaryDeleteTarget = null }) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
+
+    if (showTranslationPurchaseDialog) {
+        AlertDialog(
+            onDismissRequest = { showTranslationPurchaseDialog = false },
+            title = { Text("翻訳機能の解放") },
+            text = { Text("翻訳機能は購入後に利用できます。今すぐ購入しますか？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (activity == null) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("購入画面を開けませんでした")
+                            }
+                            return@TextButton
+                        }
+                        viewModel.purchaseTranslation(activity)
+                        showTranslationPurchaseDialog = false
+                    },
+                ) {
+                    Text("購入する")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTranslationPurchaseDialog = false }) {
+                    Text("閉じる")
+                }
+            },
+        )
+    }
+
     if (showTtsDialog) {
         AlertDialog(
             onDismissRequest = { showTtsDialog = false },
@@ -976,13 +1156,24 @@ fun EditorScreen(
             history = calcHistory,
             onInsertExpressionAndResult = { expression, result ->
                 val prefix = if (lastCalcInsertedFlag) "\n" else ""
-                appendTextToEditor("$prefix$expression =$result")
+                val normalizedExpression = expression
+                    .replace("&times;", "×")
+                    .replace("&divide;", "÷")
+                    .replace("&equals;", "=")
+                    .replace("&comma;", ",")
+                val normalizedResult = result
+                    .replace("&equals;", "=")
+                    .replace("&comma;", ",")
+                appendTextToEditor("$prefix$normalizedExpression=$normalizedResult")
                 lastCalcInsertedFlag = true
                 showCalculatorSheet = false
             },
             onInsertResultOnly = { result ->
                 val prefix = if (lastCalcInsertedFlag) "\n" else ""
-                appendTextToEditor("$prefix=$result")
+                val normalizedResult = result
+                    .replace("&equals;", "=")
+                    .replace("&comma;", ",")
+                appendTextToEditor("$prefix=$normalizedResult")
                 lastCalcInsertedFlag = true
                 showCalculatorSheet = false
             },
@@ -1018,9 +1209,7 @@ fun EditorScreen(
                     TextButton(
                         onClick = {
                             if (!uiState.hasTranslation) {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("翻訳機能はProまたは翻訳パックで利用できます")
-                                }
+                                showTranslationPurchaseDialog = true
                                 return@TextButton
                             }
                             runTranslationFlow(
