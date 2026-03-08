@@ -58,6 +58,10 @@ class SettingsDataStore @Inject constructor(
         val REQUIRE_AUTH_ON_LAUNCH = booleanPreferencesKey("require_auth_on_launch")
         val REMOVE_ADS_PURCHASED = booleanPreferencesKey("remove_ads_purchased")
         val LAST_BACKUP_DATETIME = stringPreferencesKey("last_backup_datetime")
+        val APP_BACKUP_ENABLED = booleanPreferencesKey("app_backup_enabled")
+        val APP_BACKUP_HOUR = intPreferencesKey("app_backup_hour")
+        val APP_BACKUP_MINUTE = intPreferencesKey("app_backup_minute")
+        val APP_BACKUP_MAX_GENERATIONS = intPreferencesKey("app_backup_max_gen")
 
         val MEMO_TOOLBAR_BOLD = booleanPreferencesKey("memo_toolbar_bold")
         val MEMO_TOOLBAR_TEXT_COLOR = booleanPreferencesKey("memo_toolbar_text_color")
@@ -145,6 +149,11 @@ class SettingsDataStore @Inject constructor(
                 fullCopy = preferences[Keys.MEMO_TOOLBAR_FULL_COPY] ?: true,
             )
 
+            val appBackupHour = (preferences[Keys.APP_BACKUP_HOUR] ?: 0).coerceIn(0, 23)
+            val appBackupMinute = (preferences[Keys.APP_BACKUP_MINUTE] ?: 0).coerceIn(0, 59)
+            val appBackupMaxGenerations = (preferences[Keys.APP_BACKUP_MAX_GENERATIONS] ?: 10)
+                .coerceIn(1, 10)
+
             AppSettings(
                 themeMode = themeMode,
                 listLayoutMode = layoutMode,
@@ -158,6 +167,10 @@ class SettingsDataStore @Inject constructor(
                 requireAuthOnLaunch = preferences[Keys.REQUIRE_AUTH_ON_LAUNCH] ?: false,
                 removeAdsPurchased = preferences[Keys.REMOVE_ADS_PURCHASED] ?: false,
                 lastBackupDateTime = preferences[Keys.LAST_BACKUP_DATETIME],
+                appBackupEnabled = preferences[Keys.APP_BACKUP_ENABLED] ?: true,
+                appBackupHour = appBackupHour,
+                appBackupMinute = appBackupMinute,
+                appBackupMaxGenerations = appBackupMaxGenerations,
                 memoToolbarSettings = toolbarSettings,
                 calculatorTaxRate = (preferences[Keys.CALCULATOR_TAX_RATE] ?: 10.0).coerceIn(0.0, 100.0),
             )
@@ -232,6 +245,23 @@ class SettingsDataStore @Inject constructor(
             } else {
                 preferences[Keys.LAST_BACKUP_DATETIME] = value
             }
+        }
+    }
+
+    suspend fun setAppBackupEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[Keys.APP_BACKUP_ENABLED] = enabled }
+    }
+
+    suspend fun setAppBackupTime(hour: Int, minute: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[Keys.APP_BACKUP_HOUR] = hour.coerceIn(0, 23)
+            preferences[Keys.APP_BACKUP_MINUTE] = minute.coerceIn(0, 59)
+        }
+    }
+
+    suspend fun setAppBackupMaxGenerations(value: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[Keys.APP_BACKUP_MAX_GENERATIONS] = value.coerceIn(1, 10)
         }
     }
 

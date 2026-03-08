@@ -25,6 +25,9 @@ interface SettingsRepository {
     suspend fun setRequireAuthOnLaunch(enabled: Boolean)
     suspend fun setRemoveAdsPurchased(purchased: Boolean)
     suspend fun setLastBackupDateTime(value: String?)
+    suspend fun setAppBackupEnabled(enabled: Boolean)
+    suspend fun setAppBackupTime(hour: Int, minute: Int)
+    suspend fun setAppBackupMaxGenerations(value: Int)
     suspend fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean)
     fun observeTaxRate(): Flow<Double>
     suspend fun setTaxRate(rate: Double)

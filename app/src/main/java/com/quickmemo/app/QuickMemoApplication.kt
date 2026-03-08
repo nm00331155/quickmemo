@@ -2,6 +2,7 @@ package com.quickmemo.app
 
 import android.app.Application
 import com.quickmemo.app.ads.AdsManager
+import com.quickmemo.app.worker.AppBackupScheduler
 import com.quickmemo.app.worker.TodoReminderScheduler
 import com.quickmemo.app.worker.TrashCleanupScheduler
 import dagger.hilt.android.HiltAndroidApp
@@ -18,5 +19,6 @@ class QuickMemoApplication : Application() {
         adsManager.initialize(this)
         TrashCleanupScheduler.schedule(this)
         TodoReminderScheduler.schedule(this)
+        AppBackupScheduler.schedule(this)
     }
 }

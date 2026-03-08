@@ -7,6 +7,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.quickmemo.app.billing.BillingManager
+import com.quickmemo.app.data.backup.MemoBackupManager
 import com.quickmemo.app.domain.model.DictionaryEntry
 import com.quickmemo.app.domain.model.Memo
 import com.quickmemo.app.domain.model.MemoBlock
@@ -25,6 +26,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -37,6 +41,7 @@ class EditorViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     observeSettingsUseCase: ObserveSettingsUseCase,
     private val billingManager: BillingManager,
+    private val memoBackupManager: MemoBackupManager,
 ) : ViewModel() {
 
     private val memoIdArg: Long = savedStateHandle.get<Long>(ARG_MEMO_ID) ?: 0L
@@ -50,6 +55,10 @@ class EditorViewModel @Inject constructor(
     val dictionaryEntries: StateFlow<List<DictionaryEntry>> = _dictionaryEntries.asStateFlow()
     private val undoRedoManager = UndoRedoManager(maxHistory = 50)
     val calcHistory = mutableStateListOf<CalcHistoryEntry>()
+    private var periodicBackupJob: Job? = null
+    private var periodicBackupMemoId: Long = 0L
+    private var latestEditorSnapshot: EditorBackupSnapshot? = null
+    private var lastRealtimeSnapshotSignature: String = ""
 
     init {
         viewModelScope.launch {
@@ -148,6 +157,13 @@ class EditorViewModel @Inject constructor(
                         updatedAt = memo.updatedAt,
                     )
                 }
+
+                latestEditorSnapshot = EditorBackupSnapshot(
+                    memoId = memo.id,
+                    title = memo.title,
+                    contentHtml = memo.contentHtml,
+                )
+                startPeriodicBackups(memo.id)
             }
         }
     }
@@ -174,6 +190,7 @@ class EditorViewModel @Inject constructor(
         blocks: List<MemoBlock>,
     ): Long? {
         val current = _uiState.value
+        val updatedAt = System.currentTimeMillis()
         val savedId = saveMemoUseCase(
             Memo(
                 id = current.memoId,
@@ -185,13 +202,65 @@ class EditorViewModel @Inject constructor(
                 isPinned = current.isPinned,
                 isLocked = current.isLocked,
                 createdAt = current.createdAt,
-                updatedAt = System.currentTimeMillis(),
+                updatedAt = updatedAt,
             )
         )
-        if (savedId != null && current.memoId == 0L) {
-            _uiState.update { it.copy(memoId = savedId) }
+        if (savedId != null) {
+            val resolvedMemoId = if (current.memoId == 0L) savedId else current.memoId
+            if (current.memoId == 0L) {
+                _uiState.update { it.copy(memoId = savedId, updatedAt = updatedAt) }
+            } else {
+                _uiState.update { it.copy(updatedAt = updatedAt) }
+            }
+
+            val snapshot = EditorBackupSnapshot(
+                memoId = resolvedMemoId,
+                title = current.title,
+                contentHtml = contentHtml,
+            )
+            latestEditorSnapshot = snapshot
+            startPeriodicBackups(resolvedMemoId)
+
+            val signature = buildSnapshotSignature(snapshot)
+            if (signature != lastRealtimeSnapshotSignature) {
+                memoBackupManager.saveRealtimeBackup(
+                    memoId = resolvedMemoId,
+                    title = current.title,
+                    contentHtml = contentHtml,
+                )
+                lastRealtimeSnapshotSignature = signature
+            }
         }
         return savedId
+    }
+
+    fun onEditorSnapshotChanged(
+        memoId: Long,
+        title: String,
+        contentHtml: String,
+    ) {
+        if (memoId <= 0L) return
+        if (title.isBlank() && contentHtml.isBlank()) return
+
+        val snapshot = EditorBackupSnapshot(
+            memoId = memoId,
+            title = title,
+            contentHtml = contentHtml,
+        )
+        latestEditorSnapshot = snapshot
+        startPeriodicBackups(memoId)
+
+        val signature = buildSnapshotSignature(snapshot)
+        if (signature == lastRealtimeSnapshotSignature) return
+        lastRealtimeSnapshotSignature = signature
+
+        viewModelScope.launch {
+            memoBackupManager.saveRealtimeBackup(
+                memoId = memoId,
+                title = title,
+                contentHtml = contentHtml,
+            )
+        }
     }
 
     fun initializeUndoRedo(initialSnapshot: String) {
@@ -242,6 +311,11 @@ class EditorViewModel @Inject constructor(
         billingManager.launchPurchase(activity, BillingManager.Products.UNLOCK_TRANSLATION)
     }
 
+    override fun onCleared() {
+        periodicBackupJob?.cancel()
+        super.onCleared()
+    }
+
     private fun publishUndoRedoAvailability() {
         _uiState.update {
             it.copy(
@@ -275,10 +349,65 @@ class EditorViewModel @Inject constructor(
         )
     }
 
+    private fun startPeriodicBackups(memoId: Long) {
+        if (memoId <= 0L) return
+        if (periodicBackupMemoId == memoId && periodicBackupJob?.isActive == true) return
+
+        periodicBackupJob?.cancel()
+        periodicBackupMemoId = memoId
+        periodicBackupJob = viewModelScope.launch {
+            launch {
+                while (isActive) {
+                    delay(60_000)
+                    savePeriodicBackupIfNeeded(
+                        memoId = memoId,
+                        type = MemoBackupManager.TYPE_1MIN,
+                    )
+                }
+            }
+
+            launch {
+                while (isActive) {
+                    delay(300_000)
+                    savePeriodicBackupIfNeeded(
+                        memoId = memoId,
+                        type = MemoBackupManager.TYPE_5MIN,
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun savePeriodicBackupIfNeeded(
+        memoId: Long,
+        type: String,
+    ) {
+        val snapshot = latestEditorSnapshot ?: return
+        if (snapshot.memoId != memoId) return
+        if (snapshot.title.isBlank() && snapshot.contentHtml.isBlank()) return
+
+        memoBackupManager.savePeriodicBackup(
+            memoId = memoId,
+            title = snapshot.title,
+            contentHtml = snapshot.contentHtml,
+            type = type,
+        )
+    }
+
+    private fun buildSnapshotSignature(snapshot: EditorBackupSnapshot): String {
+        return "${snapshot.memoId}:${snapshot.title.hashCode()}:${snapshot.contentHtml.hashCode()}"
+    }
+
     companion object {
         const val ARG_MEMO_ID = "memoId"
         const val ARG_PREFILL_TEXT = "prefillText"
         const val ARG_INSERT_TODAY = "insertToday"
         const val ARG_COLOR_LABEL = "colorLabel"
     }
+
+    private data class EditorBackupSnapshot(
+        val memoId: Long,
+        val title: String,
+        val contentHtml: String,
+    )
 }

@@ -197,6 +197,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setAppBackupEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAppBackupEnabled(enabled)
+        }
+    }
+
+    fun setAppBackupTime(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            settingsRepository.setAppBackupTime(hour = hour, minute = minute)
+        }
+    }
+
+    fun setAppBackupMaxGenerations(value: Int) {
+        viewModelScope.launch {
+            settingsRepository.setAppBackupMaxGenerations(value)
+        }
+    }
+
     fun setLastBackupDateTimeNow() {
         val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"))
         setLastBackupDateTime(now)
@@ -256,6 +274,17 @@ class SettingsViewModel @Inject constructor(
         )
         settingsRepository.setTodoReminderOneWeek(
             settingsObject.optBoolean("todo_reminder_1week", false),
+        )
+
+        settingsRepository.setAppBackupEnabled(
+            settingsObject.optBoolean("app_backup_enabled", true),
+        )
+        settingsRepository.setAppBackupTime(
+            hour = settingsObject.optInt("app_backup_hour", 0),
+            minute = settingsObject.optInt("app_backup_minute", 0),
+        )
+        settingsRepository.setAppBackupMaxGenerations(
+            settingsObject.optInt("app_backup_max_gen", 10),
         )
 
         settingsRepository.setMemoToolbarFeature(
@@ -404,6 +433,10 @@ private fun com.quickmemo.app.domain.model.AppSettings.toBackupJson(): JSONObjec
         put("todo_reminder_1day", reminderSettings.oneDayBefore)
         put("todo_reminder_3days", reminderSettings.threeDaysBefore)
         put("todo_reminder_1week", reminderSettings.oneWeekBefore)
+        put("app_backup_enabled", appBackupEnabled)
+        put("app_backup_hour", appBackupHour)
+        put("app_backup_minute", appBackupMinute)
+        put("app_backup_max_gen", appBackupMaxGenerations)
 
         put("memo_toolbar_bold", memoToolbarSettings.boldItalic)
         put("memo_toolbar_text_color", memoToolbarSettings.textColor)

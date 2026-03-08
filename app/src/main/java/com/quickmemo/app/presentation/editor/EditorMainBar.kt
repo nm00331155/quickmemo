@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -185,6 +186,7 @@ private fun ToolbarActionButton(
     Box(
         modifier = Modifier
             .size(48.dp)
+            .focusProperties { canFocus = false }
             .graphicsLayer {
                 alpha = if (enabled) 1f else 0.3f
             }

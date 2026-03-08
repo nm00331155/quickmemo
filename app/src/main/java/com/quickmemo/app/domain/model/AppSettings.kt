@@ -34,6 +34,10 @@ data class AppSettings(
     val requireAuthOnLaunch: Boolean = false,
     val removeAdsPurchased: Boolean = false,
     val lastBackupDateTime: String? = null,
+    val appBackupEnabled: Boolean = true,
+    val appBackupHour: Int = 0,
+    val appBackupMinute: Int = 0,
+    val appBackupMaxGenerations: Int = 10,
     val memoToolbarSettings: MemoToolbarSettings = MemoToolbarSettings(),
     val calculatorTaxRate: Double = 10.0,
 )

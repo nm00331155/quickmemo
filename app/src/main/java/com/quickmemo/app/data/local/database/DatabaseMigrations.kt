@@ -256,4 +256,24 @@ object DatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `memo_backups` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `memoId` INTEGER NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `contentHtml` TEXT NOT NULL,
+                    `backupType` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_memo_backups_memoId` ON `memo_backups` (`memoId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_memo_backups_backupType` ON `memo_backups` (`backupType`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_memo_backups_createdAt` ON `memo_backups` (`createdAt`)")
+        }
+    }
 }

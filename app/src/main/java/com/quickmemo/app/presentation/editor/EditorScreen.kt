@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -48,6 +49,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -58,19 +60,23 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -146,6 +152,7 @@ fun EditorScreen(
     var dictionaryDeleteTarget by remember { mutableStateOf<DictionaryEntry?>(null) }
     var dictionaryLabelInput by remember { mutableStateOf("") }
     var dictionaryContentInput by remember { mutableStateOf("") }
+    var dictionaryDialogTitle by remember { mutableStateOf("辞書を追加") }
 
     var showOcrSourceSheet by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -170,6 +177,51 @@ fun EditorScreen(
 
     val ocrProcessor = remember { OcrProcessor() }
     val translationManager = remember { TranslationManager() }
+    val currentMemoId by rememberUpdatedState(uiState.memoId)
+    val currentMemoTitle by rememberUpdatedState(uiState.title)
+
+    val selectedTextForDictionary by remember {
+        derivedStateOf {
+            val activeId = activeRichBlockId ?: return@derivedStateOf ""
+            val state = richTextStates[activeId] ?: return@derivedStateOf ""
+            val fullText = state.annotatedString.text
+            if (fullText.isBlank()) return@derivedStateOf ""
+
+            val selection = state.selection
+            val start = selection.min.coerceIn(0, fullText.length)
+            val end = selection.max.coerceIn(0, fullText.length)
+            if (start >= end) return@derivedStateOf ""
+            fullText.substring(start, end).trim()
+        }
+    }
+
+    val liveCharCount by remember {
+        derivedStateOf {
+            val richBlockIds = memoBlocks.mapNotNull { block ->
+                when (block) {
+                    is MemoBlock.RichTextBlock -> block.id
+                    is MemoBlock.TableBlock -> null
+                }
+            }
+            if (richBlockIds.isEmpty()) {
+                return@derivedStateOf currentPlainText.length
+            }
+
+            val blockTexts = richBlockIds.map { id ->
+                val state = richTextStates[id] ?: return@derivedStateOf currentPlainText.length
+                state.annotatedString.text
+            }
+            blockTexts.joinToString(separator = "\n").length
+        }
+    }
+
+    suspend fun showInfoMessage(message: String) {
+        snackbarHostState.currentSnackbarData?.dismiss()
+        snackbarHostState.showSnackbar(
+            message = message,
+            duration = SnackbarDuration.Short,
+        )
+    }
 
     fun activeRichTextState(): RichTextState? {
         val byId = activeRichBlockId?.let { richTextStates[it] }
@@ -250,6 +302,7 @@ fun EditorScreen(
         dictionaryEditTarget = null
         dictionaryLabelInput = ""
         dictionaryContentInput = ""
+        dictionaryDialogTitle = "辞書を追加"
         showDictionaryEditorDialog = true
     }
 
@@ -257,6 +310,7 @@ fun EditorScreen(
         dictionaryEditTarget = entry
         dictionaryLabelInput = entry.label
         dictionaryContentInput = entry.content
+        dictionaryDialogTitle = "辞書を編集"
         showDictionaryEditorDialog = true
     }
 
@@ -265,7 +319,7 @@ fun EditorScreen(
         val content = dictionaryContentInput.trim()
         if (label.isBlank() || content.isBlank()) {
             scope.launch {
-                snackbarHostState.showSnackbar("ラベルと内容を入力してください")
+                showInfoMessage("ラベルと内容を入力してください")
             }
             return
         }
@@ -283,13 +337,14 @@ fun EditorScreen(
         }
         showDictionaryEditorDialog = false
         dictionaryEditTarget = null
+        dictionaryDialogTitle = "辞書を追加"
     }
 
     fun copyFullTextToClipboard() {
         val plainText = memoBlocksToPlainText(resolveCurrentBlocks())
         clipboardManager.setText(AnnotatedString(plainText))
         scope.launch {
-            snackbarHostState.showSnackbar("メモをコピーしました")
+            showInfoMessage("メモをコピーしました")
         }
     }
 
@@ -305,7 +360,7 @@ fun EditorScreen(
 
         if (body.isBlank()) {
             scope.launch {
-                snackbarHostState.showSnackbar("共有する内容がありません")
+                showInfoMessage("共有する内容がありません")
             }
             return
         }
@@ -359,7 +414,7 @@ fun EditorScreen(
         val text = currentPlainText.trim()
         if (text.isBlank()) {
             scope.launch {
-                snackbarHostState.showSnackbar("読み上げるテキストがありません")
+                showInfoMessage("読み上げるテキストがありません")
             }
             return
         }
@@ -367,7 +422,7 @@ fun EditorScreen(
         val engine = ttsEngine
         if (engine == null || !ttsReady) {
             scope.launch {
-                snackbarHostState.showSnackbar(ttsErrorMessage ?: "読み上げ機能を初期化できませんでした")
+                showInfoMessage(ttsErrorMessage ?: "読み上げ機能を初期化できませんでした")
             }
             return
         }
@@ -382,7 +437,7 @@ fun EditorScreen(
         )
         if (speakResult == TextToSpeech.ERROR) {
             scope.launch {
-                snackbarHostState.showSnackbar("読み上げ開始に失敗しました")
+                showInfoMessage("読み上げ開始に失敗しました")
             }
             isSpeaking = false
             return
@@ -404,12 +459,12 @@ fun EditorScreen(
         return when (val status = translationManager.downloadStatus.value) {
             is TranslationManager.TranslationDownloadStatus.Ready -> true
             is TranslationManager.TranslationDownloadStatus.Error -> {
-                snackbarHostState.showSnackbar(status.message)
+                showInfoMessage(status.message)
                 false
             }
 
             else -> {
-                snackbarHostState.showSnackbar("翻訳モデルを準備できませんでした")
+                showInfoMessage("翻訳モデルを準備できませんでした")
                 false
             }
         }
@@ -424,7 +479,7 @@ fun EditorScreen(
         val targetText = sourceText.trim()
         if (targetText.isBlank()) {
             scope.launch {
-                snackbarHostState.showSnackbar("翻訳対象のテキストがありません")
+                showInfoMessage("翻訳対象のテキストがありません")
             }
             return
         }
@@ -448,7 +503,7 @@ fun EditorScreen(
                     showTranslationResultDialog = true
                 }
             }.onFailure {
-                snackbarHostState.showSnackbar("翻訳に失敗しました")
+                showInfoMessage("翻訳に失敗しました")
             }
         }
     }
@@ -461,7 +516,7 @@ fun EditorScreen(
                 is OcrResult.Success -> {
                     val recognizedText = result.text.trim()
                     if (recognizedText.isBlank()) {
-                        snackbarHostState.showSnackbar("テキストを認識できませんでした")
+                        showInfoMessage("テキストを認識できませんでした")
                     } else {
                         ocrResultText = recognizedText
                         showOcrResultDialog = true
@@ -469,10 +524,10 @@ fun EditorScreen(
                 }
 
                 is OcrResult.Error -> {
-                    snackbarHostState.showSnackbar(result.message)
+                    showInfoMessage(result.message)
                 }
             }
-                isOcrLoading = false
+            isOcrLoading = false
         }
     }
 
@@ -497,7 +552,7 @@ fun EditorScreen(
             showOcrSourceSheet = true
         } else {
             scope.launch {
-                snackbarHostState.showSnackbar("カメラの権限が必要です")
+                showInfoMessage("カメラの権限が必要です")
             }
         }
     }
@@ -509,7 +564,7 @@ fun EditorScreen(
             pendingCameraUri?.let(::processOcrUri)
         } else {
             scope.launch {
-                snackbarHostState.showSnackbar("撮影をキャンセルしました")
+                showInfoMessage("撮影をキャンセルしました")
             }
         }
     }
@@ -534,7 +589,7 @@ fun EditorScreen(
         if (loadedSignature == signature) return@LaunchedEffect
 
         loadedSignature = signature
-    lastCalcInsertedFlag = false
+        lastCalcInsertedFlag = false
         isApplyingSnapshot = true
         richTextStates.clear()
 
@@ -563,6 +618,17 @@ fun EditorScreen(
             .debounce(500)
             .collect { snapshot ->
                 viewModel.saveUndoSnapshot(snapshot)
+
+                val blocksToBackup = resolveCurrentBlocks()
+                val mergedHtml = blocksToBackup
+                    .filterIsInstance<MemoBlock.RichTextBlock>()
+                    .joinToString(separator = "\n") { it.html }
+                    .trim()
+                viewModel.onEditorSnapshotChanged(
+                    memoId = currentMemoId,
+                    title = currentMemoTitle,
+                    contentHtml = mergedHtml,
+                )
             }
     }
 
@@ -822,6 +888,34 @@ fun EditorScreen(
                     showHighlighter = uiState.memoToolbarSettings.highlighter,
                 )
 
+                if (selectedTextForDictionary.isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                dictionaryEditTarget = null
+                                dictionaryLabelInput = selectedTextForDictionary
+                                dictionaryContentInput = selectedTextForDictionary
+                                dictionaryDialogTitle = "単語辞書に登録"
+                                showDictionaryEditorDialog = true
+                            },
+                            modifier = Modifier.focusProperties { canFocus = false },
+                        ) {
+                            Icon(
+                                painter = painterResource(id = com.quickmemo.app.R.drawable.ic_dictionary),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.size(4.dp))
+                            Text(text = "辞書に登録")
+                        }
+                    }
+                }
+
                 HorizontalDivider()
 
                 LazyColumn(
@@ -897,7 +991,7 @@ fun EditorScreen(
 
                 if (uiState.showCharacterCount) {
                     Text(
-                        text = "${currentPlainText.length}文字",
+                        text = "${liveCharCount}文字",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
@@ -950,7 +1044,7 @@ fun EditorScreen(
                         val uri = createOcrImageUri(context)
                         if (uri == null) {
                             scope.launch {
-                                snackbarHostState.showSnackbar("カメラ画像の準備に失敗しました")
+                                showInfoMessage("カメラ画像の準備に失敗しました")
                             }
                             return@TextButton
                         }
@@ -1004,9 +1098,10 @@ fun EditorScreen(
             onDismissRequest = {
                 showDictionaryEditorDialog = false
                 dictionaryEditTarget = null
+                dictionaryDialogTitle = "辞書を追加"
             },
             title = {
-                Text(if (isEditing) "辞書を編集" else "辞書を追加")
+                Text(if (isEditing) "辞書を編集" else dictionaryDialogTitle)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1037,6 +1132,7 @@ fun EditorScreen(
                     onClick = {
                         showDictionaryEditorDialog = false
                         dictionaryEditTarget = null
+                        dictionaryDialogTitle = "辞書を追加"
                     },
                 ) {
                     Text("キャンセル")
@@ -1078,7 +1174,7 @@ fun EditorScreen(
                     onClick = {
                         if (activity == null) {
                             scope.launch {
-                                snackbarHostState.showSnackbar("購入画面を開けませんでした")
+                                showInfoMessage("購入画面を開けませんでした")
                             }
                             return@TextButton
                         }
@@ -1253,7 +1349,7 @@ fun EditorScreen(
                         onClick = {
                             clipboardManager.setText(AnnotatedString(currentResult?.translatedText.orEmpty()))
                             scope.launch {
-                                snackbarHostState.showSnackbar("翻訳結果をコピーしました")
+                                showInfoMessage("翻訳結果をコピーしました")
                             }
                         },
                     ) {

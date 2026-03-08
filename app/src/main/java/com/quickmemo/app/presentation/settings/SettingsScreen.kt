@@ -39,6 +39,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -67,6 +68,7 @@ import com.quickmemo.app.domain.model.MemoToolbarFeature
 import com.quickmemo.app.domain.model.ThemeMode
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,6 +199,18 @@ fun SettingsScreen(
                                 onToggleQuickService(it)
                             },
                             onRequireAuthChanged = viewModel::setRequireAuthOnLaunch,
+                            onAppBackupEnabledChanged = viewModel::setAppBackupEnabled,
+                            onEditAppBackupTime = {
+                                showAppBackupTimePicker(
+                                    context = context,
+                                    initialHour = uiState.settings.appBackupHour,
+                                    initialMinute = uiState.settings.appBackupMinute,
+                                    onSelected = { hour, minute ->
+                                        viewModel.setAppBackupTime(hour = hour, minute = minute)
+                                    },
+                                )
+                            },
+                            onAppBackupMaxGenerationsChanged = viewModel::setAppBackupMaxGenerations,
                             onCreateBackup = {
                                 val filename = "quickmemo_backup_${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))}.json"
                                 createBackupLauncher.launch(filename)
@@ -314,6 +328,9 @@ private fun GeneralSettingsTab(
     onThemeSelected: (ThemeMode) -> Unit,
     onQuickInputChanged: (Boolean) -> Unit,
     onRequireAuthChanged: (Boolean) -> Unit,
+    onAppBackupEnabledChanged: (Boolean) -> Unit,
+    onEditAppBackupTime: () -> Unit,
+    onAppBackupMaxGenerationsChanged: (Int) -> Unit,
     onCreateBackup: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenTrash: () -> Unit,
@@ -356,6 +373,40 @@ private fun GeneralSettingsTab(
 
         item {
             SectionTitle("バックアップ")
+            SettingSwitchRow(
+                title = "アプリ自動バックアップ",
+                checked = uiState.settings.appBackupEnabled,
+                onCheckedChange = onAppBackupEnabledChanged,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = "実行時刻")
+                TextButton(
+                    onClick = onEditAppBackupTime,
+                    enabled = uiState.settings.appBackupEnabled,
+                ) {
+                    Text(
+                        text = String.format(
+                            "%02d:%02d",
+                            uiState.settings.appBackupHour,
+                            uiState.settings.appBackupMinute,
+                        ),
+                    )
+                }
+            }
+            Text("保存世代: ${uiState.settings.appBackupMaxGenerations}")
+            Slider(
+                value = uiState.settings.appBackupMaxGenerations.toFloat(),
+                onValueChange = { value ->
+                    onAppBackupMaxGenerationsChanged(value.roundToInt())
+                },
+                valueRange = 1f..10f,
+                steps = 8,
+                enabled = uiState.settings.appBackupEnabled,
+            )
             TextButton(onClick = onCreateBackup) { Text("バックアップ作成") }
             TextButton(onClick = onOpenBackup) { Text("バックアップ復元") }
             Text(
@@ -697,6 +748,23 @@ private fun showHoursPicker(
         },
         initial,
         0,
+        true,
+    ).show()
+}
+
+private fun showAppBackupTimePicker(
+    context: Context,
+    initialHour: Int,
+    initialMinute: Int,
+    onSelected: (Int, Int) -> Unit,
+) {
+    TimePickerDialog(
+        context,
+        { _, hour, minute ->
+            onSelected(hour, minute)
+        },
+        initialHour.coerceIn(0, 23),
+        initialMinute.coerceIn(0, 59),
         true,
     ).show()
 }

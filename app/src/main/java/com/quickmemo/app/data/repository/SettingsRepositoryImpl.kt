@@ -80,6 +80,18 @@ class SettingsRepositoryImpl @Inject constructor(
         dataStore.setLastBackupDateTime(value)
     }
 
+    override suspend fun setAppBackupEnabled(enabled: Boolean) {
+        dataStore.setAppBackupEnabled(enabled)
+    }
+
+    override suspend fun setAppBackupTime(hour: Int, minute: Int) {
+        dataStore.setAppBackupTime(hour, minute)
+    }
+
+    override suspend fun setAppBackupMaxGenerations(value: Int) {
+        dataStore.setAppBackupMaxGenerations(value)
+    }
+
     override suspend fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean) {
         dataStore.setMemoToolbarFeature(feature, enabled)
     }

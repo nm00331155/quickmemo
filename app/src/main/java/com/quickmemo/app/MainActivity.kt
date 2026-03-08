@@ -37,6 +37,7 @@ import com.quickmemo.app.presentation.theme.QuickMemoTheme
 import com.quickmemo.app.service.QuickMemoForegroundService
 import com.quickmemo.app.util.BiometricAuthenticator
 import com.quickmemo.app.util.QuickMemoIntents
+import com.quickmemo.app.worker.AppBackupScheduler
 import com.quickmemo.app.worker.TodoReminderScheduler
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -162,6 +163,22 @@ private fun MainActivityContent(
 
     LaunchedEffect(settings.todoReminderEnabled) {
         onToggleTodoReminder(settings.todoReminderEnabled)
+    }
+
+    LaunchedEffect(
+        settings.appBackupEnabled,
+        settings.appBackupHour,
+        settings.appBackupMinute,
+    ) {
+        if (settings.appBackupEnabled) {
+            AppBackupScheduler.schedule(
+                context = context,
+                hour = settings.appBackupHour,
+                minute = settings.appBackupMinute,
+            )
+        } else {
+            AppBackupScheduler.cancel(context)
+        }
     }
 
     LaunchedEffect(settings.requireAuthOnLaunch) {

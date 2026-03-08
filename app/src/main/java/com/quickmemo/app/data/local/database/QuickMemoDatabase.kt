@@ -6,21 +6,30 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.quickmemo.app.data.local.dao.DictionaryDao
 import com.quickmemo.app.data.local.dao.MemoDao
+import com.quickmemo.app.data.local.dao.MemoBackupDao
 import com.quickmemo.app.data.local.dao.TodoDao
 import com.quickmemo.app.data.local.entity.DictionaryEntryEntity
+import com.quickmemo.app.data.local.entity.MemoBackupEntity
 import com.quickmemo.app.data.local.entity.MemoEntity
 import com.quickmemo.app.data.local.entity.MemoFtsEntity
 import com.quickmemo.app.data.local.entity.TodoItemEntity
 
 @Database(
-    entities = [MemoEntity::class, MemoFtsEntity::class, TodoItemEntity::class, DictionaryEntryEntity::class],
-    version = 8,
+    entities = [
+        MemoEntity::class,
+        MemoFtsEntity::class,
+        TodoItemEntity::class,
+        DictionaryEntryEntity::class,
+        MemoBackupEntity::class,
+    ],
+    version = 9,
     exportSchema = false,
 )
 abstract class QuickMemoDatabase : RoomDatabase() {
     abstract fun memoDao(): MemoDao
     abstract fun todoDao(): TodoDao
     abstract fun dictionaryDao(): DictionaryDao
+    abstract fun memoBackupDao(): MemoBackupDao
 
     companion object {
         @Volatile
@@ -42,6 +51,7 @@ abstract class QuickMemoDatabase : RoomDatabase() {
                     .addMigrations(DatabaseMigrations.MIGRATION_5_6)
                     .addMigrations(DatabaseMigrations.MIGRATION_6_7)
                     .addMigrations(DatabaseMigrations.MIGRATION_7_8)
+                    .addMigrations(DatabaseMigrations.MIGRATION_8_9)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                     .also { INSTANCE = it }
