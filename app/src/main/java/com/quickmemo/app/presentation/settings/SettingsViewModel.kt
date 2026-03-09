@@ -1,6 +1,7 @@
 package com.quickmemo.app.presentation.settings
 
 import android.app.Activity
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.quickmemo.app.BuildConfig
@@ -13,7 +14,10 @@ import com.quickmemo.app.domain.model.MemoToolbarFeature
 import com.quickmemo.app.domain.model.ThemeMode
 import com.quickmemo.app.domain.repository.SettingsRepository
 import com.quickmemo.app.domain.repository.TodoRepository
+import com.quickmemo.app.service.QuickMemoForegroundService
+import com.quickmemo.app.widget.WidgetRefreshCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -34,6 +38,8 @@ class SettingsViewModel @Inject constructor(
     private val billingManager: BillingManager,
     private val todoRepository: TodoRepository,
     private val database: QuickMemoDatabase,
+    private val widgetRefreshCoordinator: WidgetRefreshCoordinator,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val baseSettingsFlow = combine(
@@ -57,6 +63,10 @@ class SettingsViewModel @Inject constructor(
         initialValue = SettingsUiState(),
     )
 
+    fun setDeepLApiKey(value: String) {
+        viewModelScope.launch { settingsRepository.setDeepLApiKey(value) }
+    }
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { settingsRepository.setThemeMode(mode) }
     }
@@ -79,6 +89,20 @@ class SettingsViewModel @Inject constructor(
 
     fun setQuickInputNotification(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setQuickInputNotificationEnabled(enabled) }
+    }
+
+    fun setLockscreenTodoMaxItems(value: Int) {
+        viewModelScope.launch {
+            settingsRepository.setLockscreenTodoMaxItems(value)
+            refreshQuickNotificationIfEnabled()
+        }
+    }
+
+    fun setLockscreenTodoTabId(value: Int) {
+        viewModelScope.launch {
+            settingsRepository.setLockscreenTodoTabId(value)
+            refreshQuickNotificationIfEnabled()
+        }
     }
 
     fun setTodoReminderEnabled(enabled: Boolean) {
@@ -188,6 +212,11 @@ class SettingsViewModel @Inject constructor(
                     todoRepository.setTabName(index, name)
                 }
             }
+
+            widgetRefreshCoordinator.refreshAll(reason = "backup_restore")
+            if (settingsObject.optBoolean("notification_quick_input", true)) {
+                QuickMemoForegroundService.refreshFromOutside(appContext)
+            }
         }
     }
 
@@ -215,6 +244,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setTtsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setTtsEnabled(enabled)
+        }
+    }
+
     fun setLastBackupDateTimeNow() {
         val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"))
         setLastBackupDateTime(now)
@@ -224,12 +259,14 @@ class SettingsViewModel @Inject constructor(
         billingManager.launchPurchase(activity)
     }
 
-    fun purchaseTranslation(activity: Activity) {
-        billingManager.launchPurchase(activity, BillingManager.Products.UNLOCK_TRANSLATION)
-    }
-
     fun refreshPurchases() {
         billingManager.queryPurchases()
+    }
+
+    private fun refreshQuickNotificationIfEnabled() {
+        if (uiState.value.settings.quickInputNotificationEnabled) {
+            QuickMemoForegroundService.refreshFromOutside(appContext)
+        }
     }
 
     private suspend fun applySettingsFromBackup(settingsObject: JSONObject) {
@@ -244,6 +281,9 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setQuickInputNotificationEnabled(
             settingsObject.optBoolean("notification_quick_input", true),
         )
+        settingsRepository.setDeepLApiKey(
+            settingsObject.optString("deepl_api_key", ""),
+        )
         settingsRepository.setRequireAuthOnLaunch(
             settingsObject.optBoolean("require_auth_on_launch", false),
         )
@@ -255,6 +295,12 @@ class SettingsViewModel @Inject constructor(
         )
         settingsRepository.setInsertCurrentTimeWithDate(
             settingsObject.optBoolean("date_include_time", false),
+        )
+        settingsRepository.setLockscreenTodoMaxItems(
+            settingsObject.optInt("lockscreen_todo_max_items", 8),
+        )
+        settingsRepository.setLockscreenTodoTabId(
+            settingsObject.optInt("lockscreen_todo_tab_id", 0),
         )
 
         settingsRepository.setTodoReminderEnabled(
@@ -285,6 +331,9 @@ class SettingsViewModel @Inject constructor(
         )
         settingsRepository.setAppBackupMaxGenerations(
             settingsObject.optInt("app_backup_max_gen", 10),
+        )
+        settingsRepository.setTtsEnabled(
+            settingsObject.optBoolean("tts_enabled", false),
         )
 
         settingsRepository.setMemoToolbarFeature(
@@ -420,10 +469,13 @@ private fun com.quickmemo.app.domain.model.AppSettings.toBackupJson(): JSONObjec
             ThemeMode.SYSTEM -> "system"
         })
         put("notification_quick_input", quickInputNotificationEnabled)
+        put("deepl_api_key", deepLApiKey)
         put("require_auth_on_launch", requireAuthOnLaunch)
         put("default_memo_color", defaultMemoColor)
         put("show_char_count", showCharacterCount)
         put("date_include_time", insertCurrentTimeWithDate)
+        put("lockscreen_todo_max_items", lockscreenTodoMaxItems)
+        put("lockscreen_todo_tab_id", lockscreenTodoTabId)
         put("todo_reminder_enabled", todoReminderEnabled)
         if (reminderSettings.customHoursBefore == null) {
             put("todo_reminder_custom_hours", JSONObject.NULL)
@@ -437,6 +489,7 @@ private fun com.quickmemo.app.domain.model.AppSettings.toBackupJson(): JSONObjec
         put("app_backup_hour", appBackupHour)
         put("app_backup_minute", appBackupMinute)
         put("app_backup_max_gen", appBackupMaxGenerations)
+        put("tts_enabled", ttsEnabled)
 
         put("memo_toolbar_bold", memoToolbarSettings.boldItalic)
         put("memo_toolbar_text_color", memoToolbarSettings.textColor)

@@ -99,7 +99,6 @@ fun PremiumScreen(
             items(
                 listOf(
                     "広告の完全除去",
-                    "翻訳機能",
                 ),
             ) { feature ->
                 Text(
@@ -115,17 +114,6 @@ fun PremiumScreen(
                     purchased = purchaseState.isAdFree,
                     onPurchase = {
                         activity?.let { viewModel.purchase(it, BillingManager.Products.REMOVE_ADS) }
-                    },
-                )
-            }
-
-            item {
-                IndividualPurchaseRow(
-                    label = "翻訳機能の解放",
-                    price = "¥300",
-                    purchased = purchaseState.hasTranslation,
-                    onPurchase = {
-                        activity?.let { viewModel.purchase(it, BillingManager.Products.UNLOCK_TRANSLATION) }
                     },
                 )
             }

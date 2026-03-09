@@ -24,11 +24,14 @@ data class MemoToolbarSettings(
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val listLayoutMode: ListLayoutMode = ListLayoutMode.GRID,
+    val deepLApiKey: String = "",
     val defaultMemoColor: Int = 0,
     val showCharacterCount: Boolean = true,
     val insertCurrentTimeWithDate: Boolean = false,
     val quickInputNotificationEnabled: Boolean = true,
     val lockscreenGuideShown: Boolean = false,
+    val lockscreenTodoMaxItems: Int = 8,
+    val lockscreenTodoTabId: Int = 0,
     val todoReminderEnabled: Boolean = true,
     val reminderSettings: ReminderSettings = ReminderSettings(),
     val requireAuthOnLaunch: Boolean = false,
@@ -38,6 +41,7 @@ data class AppSettings(
     val appBackupHour: Int = 0,
     val appBackupMinute: Int = 0,
     val appBackupMaxGenerations: Int = 10,
+    val ttsEnabled: Boolean = false,
     val memoToolbarSettings: MemoToolbarSettings = MemoToolbarSettings(),
     val calculatorTaxRate: Double = 10.0,
 )

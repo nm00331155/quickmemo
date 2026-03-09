@@ -9,21 +9,33 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import com.quickmemo.app.MainActivity
 import com.quickmemo.app.R
-import com.quickmemo.app.data.local.database.QuickMemoDatabase
+import com.quickmemo.app.domain.repository.SettingsRepository
+import com.quickmemo.app.domain.repository.TodoRepository
+import com.quickmemo.app.presentation.todo.QuickAddTodoActivity
 import com.quickmemo.app.receiver.NotificationActionReceiver
+import com.quickmemo.app.util.EditorDebugLog
 import com.quickmemo.app.util.QuickMemoIntents
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class QuickMemoForegroundService : Service() {
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
+
+    @Inject
+    lateinit var todoRepository: TodoRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var hasStartedForeground = false
@@ -35,11 +47,12 @@ class QuickMemoForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureForegroundStarted()
-
-        when (intent?.action) {
-            ACTION_REFRESH -> serviceScope.launch { refreshNotification() }
-            else -> serviceScope.launch { refreshNotification() }
-        }
+        EditorDebugLog.log(
+            context = this,
+            category = "Notification/Todo",
+            message = "service start action=${intent?.action ?: "default"}",
+        )
+        serviceScope.launch { refreshNotification() }
         return START_STICKY
     }
 
@@ -65,14 +78,12 @@ class QuickMemoForegroundService : Service() {
             startForeground(NOTIFICATION_ID, startupNotification)
         }
         hasStartedForeground = true
-        Log.d(TAG, "ForegroundService started with startup notification")
     }
 
     private suspend fun refreshNotification() {
         val notification = buildNotification()
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
-        Log.d(TAG, "Notification refreshed")
     }
 
     private fun buildStartupNotification(): Notification {
@@ -90,54 +101,44 @@ class QuickMemoForegroundService : Service() {
     }
 
     private suspend fun buildNotification(): Notification {
-        val db = QuickMemoDatabase.getInstance(applicationContext)
-        val todoDao = db.todoDao()
-
-        val uncheckedItems = try {
-            todoDao.getUncheckedItemsSync()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load unchecked todos", e)
-            emptyList()
-        }
-
-        val checkedCount = try {
-            todoDao.getCheckedCountSync()
-        } catch (_: Exception) {
-            0
-        }
-
+        val settings = settingsRepository.settingsFlow.first()
+        val tabId = settings.lockscreenTodoTabId.coerceAtLeast(0)
+        val maxVisibleItems = settings.lockscreenTodoMaxItems.coerceIn(1, 15)
+        val tabNames = todoRepository.observeTabNames().first()
+        val tabName = tabNames.getOrElse(tabId) { "Todo ${tabId + 1}" }
+        val uncheckedItems = todoRepository.getUncheckedItems(tabId).first()
+        val checkedItems = todoRepository.getCheckedItems(tabId).first()
+        val checkedCount = checkedItems.size
         val totalCount = uncheckedItems.size + checkedCount
 
-        Log.d(
-            TAG,
-            "Building notification: unchecked=${uncheckedItems.size}, checked=$checkedCount, total=$totalCount",
-        )
-        val titleText = "☑ Todo $checkedCount/$totalCount 完了"
-        val previewItems = uncheckedItems
-            .asSequence()
+        val normalizedItems = uncheckedItems
             .map { normalizeTodoLine(it.text) }
             .filter { it.isNotBlank() }
-            .take(3)
-            .toList()
-        val previewText = if (previewItems.isNotEmpty()) {
-            previewItems.joinToString(separator = "、") { "□ $it" }
-        } else if (checkedCount > 0) {
-            "すべて完了！"
-        } else {
-            "未完了Todoはありません"
+        val previewItems = normalizedItems.take(maxVisibleItems)
+        val contentText = when {
+            previewItems.isNotEmpty() -> {
+                val moreText = if (normalizedItems.size > previewItems.size) {
+                    " 他${normalizedItems.size - previewItems.size}件"
+                } else {
+                    ""
+                }
+                previewItems.joinToString(separator = "、") { "□ $it" } + moreText
+            }
+
+            checkedCount > 0 -> "すべて完了！"
+            else -> "未完了Todoはありません"
         }
-        val moreText = if (uncheckedItems.size > 3) " 他${uncheckedItems.size - 3}件" else ""
-        val contentText = "$previewText$moreText"
+        val titleText = "☑ $tabName  $checkedCount/$totalCount 完了"
+
+        EditorDebugLog.log(
+            context = this,
+            category = "Notification/Todo",
+            message = "build tabId=$tabId maxLines=$maxVisibleItems unchecked=${uncheckedItems.size} checked=$checkedCount displayed=${previewItems.size}",
+        )
 
         val inboxStyle = NotificationCompat.InboxStyle()
             .setBigContentTitle(titleText)
-        val expandedItems = uncheckedItems
-            .asSequence()
-            .map { normalizeTodoLine(it.text) }
-            .filter { it.isNotBlank() }
-            .take(8)
-            .toList()
-        if (expandedItems.isEmpty()) {
+        if (previewItems.isEmpty()) {
             inboxStyle.addLine(
                 if (checkedCount > 0) {
                     "すべて完了！"
@@ -146,33 +147,32 @@ class QuickMemoForegroundService : Service() {
                 },
             )
         } else {
-            expandedItems.forEach { inboxStyle.addLine("□ $it") }
+            previewItems.forEach { inboxStyle.addLine("□ $it") }
         }
-        if (uncheckedItems.size > 8) {
-            inboxStyle.setSummaryText("他${uncheckedItems.size - 8}件")
+        if (normalizedItems.size > previewItems.size) {
+            inboxStyle.setSummaryText("他${normalizedItems.size - previewItems.size}件")
         }
 
-        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+        val openTodoIntent = Intent(this, MainActivity::class.java).apply {
             action = QuickMemoIntents.ACTION_OPEN_TODO
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val openAppPending = PendingIntent.getActivity(
+        val openTodoPending = PendingIntent.getActivity(
             this,
-            100,
-            openAppIntent,
+            REQUEST_OPEN_TODO,
+            openTodoIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
         val remoteInputTodo = RemoteInput.Builder(NotificationActionReceiver.REMOTE_INPUT_ADD_TODO)
-            .setLabel("Todoを入力...")
+            .setLabel("$tabName に追加")
             .build()
-
         val addTodoBroadcastIntent = Intent(this, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_ADD_TODO
         }
         val addTodoPending = PendingIntent.getBroadcast(
             this,
-            200,
+            REQUEST_ADD_TODO,
             addTodoBroadcastIntent,
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -185,13 +185,23 @@ class QuickMemoForegroundService : Service() {
             .setAllowGeneratedReplies(false)
             .build()
 
+        val quickAddIntent = QuickAddTodoActivity.createIntent(this).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val quickAddPending = PendingIntent.getActivity(
+            this,
+            REQUEST_QUICK_ADD,
+            quickAddIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
         val openEditorIntent = Intent(this, MainActivity::class.java).apply {
             action = QuickMemoIntents.ACTION_OPEN_EDITOR
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openEditorPending = PendingIntent.getActivity(
             this,
-            101,
+            REQUEST_OPEN_EDITOR,
             openEditorIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -207,8 +217,9 @@ class QuickMemoForegroundService : Service() {
             .setStyle(inboxStyle)
             .setSilent(true)
             .setOnlyAlertOnce(true)
-            .setContentIntent(openAppPending)
+            .setContentIntent(openTodoPending)
             .addAction(addTodoAction)
+            .addAction(0, "入力画面", quickAddPending)
             .addAction(0, "メモを編集", openEditorPending)
             .build()
     }
@@ -229,10 +240,6 @@ class QuickMemoForegroundService : Service() {
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
-            Log.d(
-                TAG,
-                "NotificationChannel created: importance=DEFAULT, sound=null, lockscreenVisibility=PUBLIC",
-            )
         }
     }
 
@@ -247,9 +254,17 @@ class QuickMemoForegroundService : Service() {
         const val CHANNEL_ID = "quickmemo_todo_display_v1"
         const val NOTIFICATION_ID = 1101
         const val ACTION_REFRESH = "com.quickmemo.app.ACTION_REFRESH_NOTIFICATION"
-        private const val TAG = "QM_NOTIF"
+        private const val REQUEST_OPEN_TODO = 100
+        private const val REQUEST_OPEN_EDITOR = 101
+        private const val REQUEST_ADD_TODO = 200
+        private const val REQUEST_QUICK_ADD = 201
 
         fun refreshFromOutside(context: Context) {
+            EditorDebugLog.log(
+                context = context,
+                category = "Notification/Todo",
+                message = "external refresh requested",
+            )
             val intent = Intent(context, QuickMemoForegroundService::class.java).apply {
                 action = ACTION_REFRESH
             }

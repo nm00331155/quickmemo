@@ -7,19 +7,23 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.quickmemo.app.data.datastore.settingsDataStore
 import com.quickmemo.app.data.local.dao.TodoDao
 import com.quickmemo.app.domain.model.TodoItem
+import com.quickmemo.app.domain.repository.SettingsRepository
 import com.quickmemo.app.domain.repository.TodoRepository
 import com.quickmemo.app.service.QuickMemoForegroundService
-import com.quickmemo.app.widget.WidgetUpdateDispatcher
+import com.quickmemo.app.widget.WidgetRefreshCoordinator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 
 @Singleton
 class TodoRepositoryImpl @Inject constructor(
     private val todoDao: TodoDao,
+    private val settingsRepository: SettingsRepository,
+    private val widgetRefreshCoordinator: WidgetRefreshCoordinator,
     @ApplicationContext private val context: Context,
 ) : TodoRepository {
 
@@ -58,13 +62,13 @@ class TodoRepositoryImpl @Inject constructor(
                 sortOrder = nextSortOrder,
             ).toEntity(),
         )
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_add")
         notifyQuickNotificationUpdated()
     }
 
     override suspend fun updateText(id: String, text: String) {
         todoDao.updateText(id, text.trim())
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_update_text")
         notifyQuickNotificationUpdated()
     }
 
@@ -78,20 +82,20 @@ class TodoRepositoryImpl @Inject constructor(
                 checked = true,
                 checkedAt = System.currentTimeMillis(),
             )
-            notifyTodoWidgetUpdated()
+            notifyTodoWidgetUpdated(reason = "todo_check")
             notifyQuickNotificationUpdated()
             return
         }
 
         val nextSortOrder = todoDao.getMaxSortOrder(item.tabId) + 1
         todoDao.moveToUncheckedTail(id, nextSortOrder)
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_uncheck")
         notifyQuickNotificationUpdated()
     }
 
     override suspend fun updateDueDate(id: String, dueDate: Long?) {
         todoDao.updateDueDate(id, dueDate)
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_due_date")
         notifyQuickNotificationUpdated()
     }
 
@@ -104,7 +108,7 @@ class TodoRepositoryImpl @Inject constructor(
         }
         if (reordered.isNotEmpty()) {
             todoDao.upsertItems(reordered)
-            notifyTodoWidgetUpdated()
+            notifyTodoWidgetUpdated(reason = "todo_reorder")
             notifyQuickNotificationUpdated()
         }
     }
@@ -112,7 +116,7 @@ class TodoRepositoryImpl @Inject constructor(
     override suspend fun deleteItem(id: String): TodoItem? {
         val item = todoDao.getItemById(id)?.toDomain()
         todoDao.deleteItem(id)
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_delete")
         notifyQuickNotificationUpdated()
         return item
     }
@@ -125,7 +129,7 @@ class TodoRepositoryImpl @Inject constructor(
             item.copy(sortOrder = nextSortOrder)
         }
         todoDao.upsertItem(restored.toEntity())
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_restore")
         notifyQuickNotificationUpdated()
     }
 
@@ -138,18 +142,17 @@ class TodoRepositoryImpl @Inject constructor(
             current[tabId] = normalizedName
             preferences[TAB_NAMES_KEY] = JSONArray(current).toString()
         }
-        notifyTodoWidgetUpdated()
+        notifyTodoWidgetUpdated(reason = "todo_tab_name")
         notifyQuickNotificationUpdated()
     }
 
-    private suspend fun notifyTodoWidgetUpdated() {
-        runCatching {
-            WidgetUpdateDispatcher.updateTodoWidgets(context)
-        }
+    private suspend fun notifyTodoWidgetUpdated(reason: String) {
+        widgetRefreshCoordinator.refreshTodoWidgets(reason = reason)
     }
 
-    private fun notifyQuickNotificationUpdated() {
-        runCatching {
+    private suspend fun notifyQuickNotificationUpdated() {
+        val enabled = settingsRepository.settingsFlow.first().quickInputNotificationEnabled
+        if (enabled) {
             QuickMemoForegroundService.refreshFromOutside(context)
         }
     }

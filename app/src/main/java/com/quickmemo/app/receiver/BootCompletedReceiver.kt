@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import com.quickmemo.app.data.datastore.settingsDataStore
 import com.quickmemo.app.service.QuickMemoForegroundService
+import com.quickmemo.app.widget.widgetRefreshCoordinator
 import com.quickmemo.app.worker.AppBackupScheduler
 import com.quickmemo.app.worker.TodoReminderScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -70,6 +71,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 } else {
                     AppBackupScheduler.cancel(context)
                 }
+
+                widgetRefreshCoordinator(context).refreshAll(reason = "boot_completed")
             } finally {
                 pendingResult.finish()
             }

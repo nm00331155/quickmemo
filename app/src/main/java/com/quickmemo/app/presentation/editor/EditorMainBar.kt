@@ -13,10 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,18 +37,20 @@ fun EditorMainBar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onRunOcr: () -> Unit,
-    onOpenCalculator: () -> Unit,
     onOpenDictionary: () -> Unit,
     onOpenTranslation: () -> Unit,
     onPickDate: () -> Unit,
     onPickTime: () -> Unit,
+    onOpenTts: () -> Unit,
+    onOpenCalculator: () -> Unit,
     showFullCopy: Boolean,
     showUndoRedo: Boolean,
     showOcr: Boolean,
-    showCalculator: Boolean,
     showDictionary: Boolean,
     showTranslation: Boolean,
     showDateTimeInsert: Boolean,
+    showTts: Boolean,
+    showCalculator: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
     modifier: Modifier = Modifier,
@@ -115,18 +118,6 @@ fun EditorMainBar(
                 )
             }
 
-            if (showCalculator) {
-                ToolbarActionButton(
-                    onClick = onOpenCalculator,
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Calculate,
-                            contentDescription = "calculator",
-                        )
-                    },
-                )
-            }
-
             if (showDictionary) {
                 ToolbarActionButton(
                     onClick = onOpenDictionary,
@@ -169,6 +160,30 @@ fun EditorMainBar(
                 ToolbarActionButton(
                     onClick = onPickTime,
                     icon = { Icon(imageVector = Icons.Default.Schedule, contentDescription = "time") },
+                )
+            }
+
+            if (showTts) {
+                ToolbarActionButton(
+                    onClick = onOpenTts,
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = "tts",
+                        )
+                    },
+                )
+            }
+
+            if (showCalculator) {
+                ToolbarActionButton(
+                    onClick = onOpenCalculator,
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Calculate,
+                            contentDescription = "calculator",
+                        )
+                    },
                 )
             }
         }

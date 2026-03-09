@@ -36,6 +36,7 @@ class SettingsDataStore @Inject constructor(
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val LIST_LAYOUT_MODE = stringPreferencesKey("list_layout_mode")
+        val DEEPL_API_KEY = stringPreferencesKey("deepl_api_key")
 
         val DEFAULT_MEMO_COLOR = intPreferencesKey("default_memo_color")
 
@@ -48,6 +49,8 @@ class SettingsDataStore @Inject constructor(
         val NOTIFICATION_QUICK_INPUT = booleanPreferencesKey("notification_quick_input")
         val LEGACY_NOTIFICATION_QUICK_INPUT = booleanPreferencesKey("quick_input_notification")
         val LOCKSCREEN_GUIDE_SHOWN = booleanPreferencesKey("lockscreen_guide_shown")
+        val LOCKSCREEN_TODO_MAX_ITEMS = intPreferencesKey("lockscreen_todo_max_items")
+        val LOCKSCREEN_TODO_TAB_ID = intPreferencesKey("lockscreen_todo_tab_id")
 
         val TODO_REMINDER_ENABLED = booleanPreferencesKey("todo_reminder_enabled")
         val TODO_REMINDER_CUSTOM_HOURS = intPreferencesKey("todo_reminder_custom_hours")
@@ -62,6 +65,7 @@ class SettingsDataStore @Inject constructor(
         val APP_BACKUP_HOUR = intPreferencesKey("app_backup_hour")
         val APP_BACKUP_MINUTE = intPreferencesKey("app_backup_minute")
         val APP_BACKUP_MAX_GENERATIONS = intPreferencesKey("app_backup_max_gen")
+        val TTS_ENABLED = booleanPreferencesKey("tts_enabled")
 
         val MEMO_TOOLBAR_BOLD = booleanPreferencesKey("memo_toolbar_bold")
         val MEMO_TOOLBAR_TEXT_COLOR = booleanPreferencesKey("memo_toolbar_text_color")
@@ -157,11 +161,14 @@ class SettingsDataStore @Inject constructor(
             AppSettings(
                 themeMode = themeMode,
                 listLayoutMode = layoutMode,
+                deepLApiKey = preferences[Keys.DEEPL_API_KEY].orEmpty(),
                 defaultMemoColor = preferences[Keys.DEFAULT_MEMO_COLOR] ?: 0,
                 showCharacterCount = showCharCount,
                 insertCurrentTimeWithDate = includeTime,
                 quickInputNotificationEnabled = quickInput,
                 lockscreenGuideShown = preferences[Keys.LOCKSCREEN_GUIDE_SHOWN] ?: false,
+                lockscreenTodoMaxItems = (preferences[Keys.LOCKSCREEN_TODO_MAX_ITEMS] ?: 8).coerceIn(1, 15),
+                lockscreenTodoTabId = (preferences[Keys.LOCKSCREEN_TODO_TAB_ID] ?: 0).coerceIn(0, 2),
                 todoReminderEnabled = preferences[Keys.TODO_REMINDER_ENABLED] ?: true,
                 reminderSettings = reminderSettings,
                 requireAuthOnLaunch = preferences[Keys.REQUIRE_AUTH_ON_LAUNCH] ?: false,
@@ -171,10 +178,22 @@ class SettingsDataStore @Inject constructor(
                 appBackupHour = appBackupHour,
                 appBackupMinute = appBackupMinute,
                 appBackupMaxGenerations = appBackupMaxGenerations,
+                ttsEnabled = preferences[Keys.TTS_ENABLED] ?: false,
                 memoToolbarSettings = toolbarSettings,
                 calculatorTaxRate = (preferences[Keys.CALCULATOR_TAX_RATE] ?: 10.0).coerceIn(0.0, 100.0),
             )
         }
+
+    suspend fun setDeepLApiKey(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            val normalized = value.trim()
+            if (normalized.isBlank()) {
+                preferences.remove(Keys.DEEPL_API_KEY)
+            } else {
+                preferences[Keys.DEEPL_API_KEY] = normalized
+            }
+        }
+    }
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.settingsDataStore.edit { it[Keys.THEME_MODE] = mode.name.lowercase() }
@@ -202,6 +221,18 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setLockscreenGuideShown() {
         context.settingsDataStore.edit { it[Keys.LOCKSCREEN_GUIDE_SHOWN] = true }
+    }
+
+    suspend fun setLockscreenTodoMaxItems(value: Int) {
+        context.settingsDataStore.edit {
+            it[Keys.LOCKSCREEN_TODO_MAX_ITEMS] = value.coerceIn(1, 15)
+        }
+    }
+
+    suspend fun setLockscreenTodoTabId(value: Int) {
+        context.settingsDataStore.edit {
+            it[Keys.LOCKSCREEN_TODO_TAB_ID] = value.coerceIn(0, 2)
+        }
     }
 
     suspend fun setTodoReminderEnabled(enabled: Boolean) {
@@ -262,6 +293,12 @@ class SettingsDataStore @Inject constructor(
     suspend fun setAppBackupMaxGenerations(value: Int) {
         context.settingsDataStore.edit { preferences ->
             preferences[Keys.APP_BACKUP_MAX_GENERATIONS] = value.coerceIn(1, 10)
+        }
+    }
+
+    suspend fun setTtsEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit {
+            it[Keys.TTS_ENABLED] = enabled
         }
     }
 

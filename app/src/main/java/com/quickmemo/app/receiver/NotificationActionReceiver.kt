@@ -3,18 +3,25 @@ package com.quickmemo.app.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.core.app.RemoteInput
-import com.quickmemo.app.data.local.database.QuickMemoDatabase
-import com.quickmemo.app.data.local.entity.TodoItemEntity
-import com.quickmemo.app.service.QuickMemoForegroundService
-import com.quickmemo.app.widget.WidgetUpdateDispatcher
-import java.util.UUID
+import com.quickmemo.app.domain.repository.SettingsRepository
+import com.quickmemo.app.domain.repository.TodoRepository
+import com.quickmemo.app.util.EditorDebugLog
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class NotificationActionReceiver : BroadcastReceiver() {
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
+
+    @Inject
+    lateinit var todoRepository: TodoRepository
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_ADD_TODO) {
@@ -27,32 +34,29 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val inputText = remoteInput.getCharSequence(REMOTE_INPUT_ADD_TODO)?.toString()?.trim()
         if (inputText.isNullOrBlank()) return
 
-        Log.d(TAG, "Adding Todo from lock screen: $inputText")
+        EditorDebugLog.log(
+            context = context,
+            category = "Notification/Todo",
+            message = "direct reply received length=${inputText.length}",
+        )
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val db = QuickMemoDatabase.getInstance(context)
-                val todoDao = db.todoDao()
-
-                val maxOrder = todoDao.getMaxSortOrder(0)
-                val newItem = TodoItemEntity(
-                    id = UUID.randomUUID().toString(),
-                    tabId = 0,
-                    text = inputText,
-                    checked = false,
-                    dueDate = null,
-                    sortOrder = maxOrder + 1,
-                    createdAt = System.currentTimeMillis(),
-                    checkedAt = null,
+                val tabId = settingsRepository.settingsFlow.first().lockscreenTodoTabId
+                todoRepository.addItem(tabId, inputText)
+                EditorDebugLog.log(
+                    context = context,
+                    category = "Notification/Todo",
+                    message = "direct reply saved tabId=$tabId",
                 )
-                todoDao.upsertItem(newItem)
-
-                WidgetUpdateDispatcher.updateTodoWidgets(context)
-                QuickMemoForegroundService.refreshFromOutside(context)
-                Log.d(TAG, "Todo added successfully")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to add todo", e)
+                EditorDebugLog.log(
+                    context = context,
+                    category = "Notification/Todo",
+                    message = "direct reply failed",
+                    throwable = e,
+                )
             } finally {
                 pendingResult.finish()
             }
@@ -62,6 +66,5 @@ class NotificationActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_ADD_TODO = "com.quickmemo.app.ACTION_ADD_TODO_FROM_NOTIFICATION"
         const val REMOTE_INPUT_ADD_TODO = "key_add_todo_text"
-        private const val TAG = "QM_NOTIF_ACTION"
     }
 }

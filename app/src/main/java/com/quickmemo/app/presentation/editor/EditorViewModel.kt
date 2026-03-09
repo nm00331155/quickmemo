@@ -1,12 +1,9 @@
-// File: app/src/main/java/com/quickmemo/app/presentation/editor/EditorViewModel.kt
 package com.quickmemo.app.presentation.editor
 
-import android.app.Activity
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.quickmemo.app.billing.BillingManager
 import com.quickmemo.app.data.backup.MemoBackupManager
 import com.quickmemo.app.domain.model.DictionaryEntry
 import com.quickmemo.app.domain.model.Memo
@@ -40,7 +37,6 @@ class EditorViewModel @Inject constructor(
     private val manageTrashUseCase: ManageTrashUseCase,
     private val settingsRepository: SettingsRepository,
     observeSettingsUseCase: ObserveSettingsUseCase,
-    private val billingManager: BillingManager,
     private val memoBackupManager: MemoBackupManager,
 ) : ViewModel() {
 
@@ -61,16 +57,6 @@ class EditorViewModel @Inject constructor(
     private var lastRealtimeSnapshotSignature: String = ""
 
     init {
-        viewModelScope.launch {
-            billingManager.state.collect { billingState ->
-                _uiState.update {
-                    it.copy(
-                        hasTranslation = billingState.purchaseState.hasTranslation,
-                    )
-                }
-            }
-        }
-
         viewModelScope.launch {
             dictionaryRepository.observeEntries().collect { entries ->
                 _dictionaryEntries.value = entries
@@ -97,6 +83,7 @@ class EditorViewModel @Inject constructor(
                         insertCurrentTimeWithDate = settings.insertCurrentTimeWithDate,
                         colorLabel = resolvedColor,
                         memoToolbarSettings = settings.memoToolbarSettings,
+                        ttsEnabled = settings.ttsEnabled,
                     )
                 }
             }
@@ -305,10 +292,6 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch {
             dictionaryRepository.deleteEntry(entry)
         }
-    }
-
-    fun purchaseTranslation(activity: Activity) {
-        billingManager.launchPurchase(activity, BillingManager.Products.UNLOCK_TRANSLATION)
     }
 
     override fun onCleared() {

@@ -16,6 +16,10 @@ class SettingsRepositoryImpl @Inject constructor(
 ) : SettingsRepository {
     override val settingsFlow: Flow<AppSettings> = dataStore.settingsFlow
 
+    override suspend fun setDeepLApiKey(value: String) {
+        dataStore.setDeepLApiKey(value)
+    }
+
     override suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.setThemeMode(mode)
     }
@@ -46,6 +50,14 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setLockscreenGuideShown() {
         dataStore.setLockscreenGuideShown()
+    }
+
+    override suspend fun setLockscreenTodoMaxItems(value: Int) {
+        dataStore.setLockscreenTodoMaxItems(value)
+    }
+
+    override suspend fun setLockscreenTodoTabId(value: Int) {
+        dataStore.setLockscreenTodoTabId(value)
     }
 
     override suspend fun setTodoReminderEnabled(enabled: Boolean) {
@@ -90,6 +102,10 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setAppBackupMaxGenerations(value: Int) {
         dataStore.setAppBackupMaxGenerations(value)
+    }
+
+    override suspend fun setTtsEnabled(enabled: Boolean) {
+        dataStore.setTtsEnabled(enabled)
     }
 
     override suspend fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean) {

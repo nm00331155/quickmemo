@@ -36,6 +36,9 @@ class MemoViewWidgetConfigActivity : ComponentActivity() {
     @Inject
     lateinit var memoRepository: MemoRepository
 
+    @Inject
+    lateinit var widgetRefreshCoordinator: WidgetRefreshCoordinator
+
     private var appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,7 +67,7 @@ class MemoViewWidgetConfigActivity : ComponentActivity() {
     private fun onSelectMemo(memoId: Long) {
         WidgetConfigStore.saveMemoId(this, appWidgetId, memoId)
         lifecycleScope.launch {
-            WidgetUpdateDispatcher.updateMemoWidgets(this@MemoViewWidgetConfigActivity)
+            widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_widget_config")
             setResult(
                 RESULT_OK,
                 Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),

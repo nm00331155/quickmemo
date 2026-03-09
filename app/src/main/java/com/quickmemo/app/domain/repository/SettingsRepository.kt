@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 interface SettingsRepository {
     val settingsFlow: Flow<AppSettings>
 
+    suspend fun setDeepLApiKey(value: String)
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setListLayoutMode(mode: ListLayoutMode)
     suspend fun setDefaultMemoColor(colorLabel: Int)
@@ -17,6 +18,8 @@ interface SettingsRepository {
     suspend fun setQuickInputNotificationEnabled(enabled: Boolean)
     fun observeLockscreenGuideShown(): Flow<Boolean>
     suspend fun setLockscreenGuideShown()
+    suspend fun setLockscreenTodoMaxItems(value: Int)
+    suspend fun setLockscreenTodoTabId(value: Int)
     suspend fun setTodoReminderEnabled(enabled: Boolean)
     suspend fun setTodoReminderCustomHours(hours: Int?)
     suspend fun setTodoReminderOneDay(enabled: Boolean)
@@ -28,6 +31,7 @@ interface SettingsRepository {
     suspend fun setAppBackupEnabled(enabled: Boolean)
     suspend fun setAppBackupTime(hour: Int, minute: Int)
     suspend fun setAppBackupMaxGenerations(value: Int)
+    suspend fun setTtsEnabled(enabled: Boolean)
     suspend fun setMemoToolbarFeature(feature: MemoToolbarFeature, enabled: Boolean)
     fun observeTaxRate(): Flow<Double>
     suspend fun setTaxRate(rate: Double)

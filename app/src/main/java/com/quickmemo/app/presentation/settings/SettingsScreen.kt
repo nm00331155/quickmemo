@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quickmemo.app.domain.model.MemoColor
 import com.quickmemo.app.domain.model.MemoToolbarFeature
 import com.quickmemo.app.domain.model.ThemeMode
+import com.quickmemo.app.util.EditorDebugLog
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -223,8 +224,21 @@ fun SettingsScreen(
                             onPurchaseRemoveAds = {
                                 activity?.let { viewModel.purchaseRemoveAds(it) }
                             },
-                            onPurchaseTranslation = {
-                                activity?.let { viewModel.purchaseTranslation(it) }
+                            onShareDebugLog = {
+                                val shareIntent = EditorDebugLog.buildShareIntent(context)
+                                if (shareIntent == null) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("共有できるデバッグログがありません")
+                                    }
+                                } else {
+                                    context.startActivity(Intent.createChooser(shareIntent, "デバッグログを共有"))
+                                }
+                            },
+                            onClearDebugLog = {
+                                EditorDebugLog.clear(context)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("デバッグログを削除しました")
+                                }
                             },
                             onOpenContact = {
                                 val intent = Intent(Intent.ACTION_SENDTO).apply {
@@ -242,6 +256,8 @@ fun SettingsScreen(
                             onDefaultColorSelected = viewModel::setDefaultMemoColor,
                             onShowCharCountChanged = viewModel::setShowCharacterCount,
                             onDateIncludeTimeChanged = viewModel::setInsertCurrentTimeWithDate,
+                            onDeepLApiKeyChanged = viewModel::setDeepLApiKey,
+                            onTtsEnabledChanged = viewModel::setTtsEnabled,
                             onToolbarFeatureChanged = viewModel::setMemoToolbarFeature,
                             onTaxRateChanged = viewModel::setTaxRate,
                         )
@@ -282,6 +298,8 @@ fun SettingsScreen(
                             onReminderOneDayChanged = viewModel::setTodoReminderOneDay,
                             onReminderThreeDaysChanged = viewModel::setTodoReminderThreeDays,
                             onReminderOneWeekChanged = viewModel::setTodoReminderOneWeek,
+                            onLockscreenTodoMaxItemsChanged = viewModel::setLockscreenTodoMaxItems,
+                            onLockscreenTodoTabIdChanged = viewModel::setLockscreenTodoTabId,
                             onTabNameChanged = viewModel::setTodoTabName,
                         )
                     }
@@ -336,7 +354,8 @@ private fun GeneralSettingsTab(
     onOpenTrash: () -> Unit,
     onOpenPremium: () -> Unit,
     onPurchaseRemoveAds: () -> Unit,
-    onPurchaseTranslation: () -> Unit,
+    onShareDebugLog: () -> Unit,
+    onClearDebugLog: () -> Unit,
     onOpenContact: () -> Unit,
 ) {
     LazyColumn(
@@ -359,6 +378,11 @@ private fun GeneralSettingsTab(
                 title = "通知バーにクイック入力を表示",
                 checked = uiState.settings.quickInputNotificationEnabled,
                 onCheckedChange = onQuickInputChanged,
+            )
+            Text(
+                text = "ロック画面からの直接追加は端末や OEM 設定により制限される場合があります。Direct Reply が使えない場合は通知の入力画面導線を利用してください。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -427,9 +451,12 @@ private fun GeneralSettingsTab(
             if (uiState.billingState.purchaseState.shouldShowAds) {
                 TextButton(onClick = onPurchaseRemoveAds) { Text("広告非表示を購入") }
             }
-            if (!uiState.billingState.purchaseState.hasTranslation) {
-                TextButton(onClick = onPurchaseTranslation) { Text("翻訳機能の解放") }
-            }
+        }
+
+        item {
+            SectionTitle("デバッグ")
+            TextButton(onClick = onShareDebugLog) { Text("debug log を共有") }
+            TextButton(onClick = onClearDebugLog) { Text("debug log をクリア") }
         }
 
         item {
@@ -447,6 +474,8 @@ private fun MemoSettingsTab(
     onDefaultColorSelected: (Int) -> Unit,
     onShowCharCountChanged: (Boolean) -> Unit,
     onDateIncludeTimeChanged: (Boolean) -> Unit,
+    onDeepLApiKeyChanged: (String) -> Unit,
+    onTtsEnabledChanged: (Boolean) -> Unit,
     onToolbarFeatureChanged: (MemoToolbarFeature, Boolean) -> Unit,
     onTaxRateChanged: (Double) -> Unit,
 ) {
@@ -506,6 +535,29 @@ private fun MemoSettingsTab(
                 title = "日付挿入時に現在時刻も追加",
                 checked = uiState.settings.insertCurrentTimeWithDate,
                 onCheckedChange = onDateIncludeTimeChanged,
+            )
+        }
+
+        item {
+            SectionTitle("翻訳")
+            OutlinedTextField(
+                value = uiState.settings.deepLApiKey,
+                onValueChange = onDeepLApiKeyChanged,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("DeepL API キー") },
+                supportingText = {
+                    Text("空でも動作します。保存後すぐ反映されます。")
+                },
+            )
+        }
+
+        item {
+            SectionTitle("読み上げ")
+            SettingSwitchRow(
+                title = "エディタで読み上げを表示",
+                checked = uiState.settings.ttsEnabled,
+                onCheckedChange = onTtsEnabledChanged,
             )
         }
 
@@ -585,6 +637,8 @@ private fun TodoSettingsTab(
     onReminderOneDayChanged: (Boolean) -> Unit,
     onReminderThreeDaysChanged: (Boolean) -> Unit,
     onReminderOneWeekChanged: (Boolean) -> Unit,
+    onLockscreenTodoMaxItemsChanged: (Int) -> Unit,
+    onLockscreenTodoTabIdChanged: (Int) -> Unit,
     onTabNameChanged: (Int, String) -> Unit,
 ) {
     val reminder = uiState.settings.reminderSettings
@@ -636,6 +690,46 @@ private fun TodoSettingsTab(
 
         item {
             SectionTitle("Todoタブ名称")
+        }
+
+        item {
+            SectionTitle("ロック画面 Todo")
+            Text(
+                text = "表示件数: ${uiState.settings.lockscreenTodoMaxItems}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Slider(
+                value = uiState.settings.lockscreenTodoMaxItems.toFloat(),
+                onValueChange = { value ->
+                    onLockscreenTodoMaxItemsChanged(value.roundToInt())
+                },
+                valueRange = 1f..15f,
+                steps = 13,
+            )
+            Text(
+                text = "対象タブ",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            uiState.todoTabNames.take(3).forEachIndexed { index, name ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLockscreenTodoTabIdChanged(index) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = uiState.settings.lockscreenTodoTabId == index,
+                        onClick = { onLockscreenTodoTabIdChanged(index) },
+                    )
+                    Text(name)
+                }
+            }
+            Text(
+                text = "端末によっては Direct Reply が動かないため、その場合は通知の入力画面を使います。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         items(3) { index ->

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.FragmentActivity
 import com.quickmemo.app.domain.model.AppSettings
 import com.quickmemo.app.domain.repository.SettingsRepository
@@ -37,6 +38,7 @@ import com.quickmemo.app.presentation.theme.QuickMemoTheme
 import com.quickmemo.app.service.QuickMemoForegroundService
 import com.quickmemo.app.util.BiometricAuthenticator
 import com.quickmemo.app.util.QuickMemoIntents
+import com.quickmemo.app.widget.WidgetRefreshCoordinator
 import com.quickmemo.app.worker.AppBackupScheduler
 import com.quickmemo.app.worker.TodoReminderScheduler
 import dagger.hilt.android.AndroidEntryPoint
@@ -51,6 +53,9 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var biometricAuthenticator: BiometricAuthenticator
+
+    @Inject
+    lateinit var widgetRefreshCoordinator: WidgetRefreshCoordinator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +93,10 @@ class MainActivity : FragmentActivity() {
                     },
                 )
             }
+        }
+
+        lifecycleScope.launch {
+            widgetRefreshCoordinator.refreshAll(reason = "app_start")
         }
     }
 

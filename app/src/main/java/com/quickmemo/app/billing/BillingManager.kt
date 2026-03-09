@@ -139,10 +139,7 @@ class BillingManager @Inject constructor(
 
         queryProductDetailsByType(
             productType = BillingClient.ProductType.INAPP,
-            productIds = listOf(
-                Products.REMOVE_ADS,
-                Products.UNLOCK_TRANSLATION,
-            ),
+            productIds = listOf(Products.REMOVE_ADS),
         ) { detailsMap ->
             _state.value = _state.value.copy(
                 inAppProductDetails = detailsMap,
@@ -199,7 +196,6 @@ class BillingManager @Inject constructor(
         val allPurchases = latestInAppPurchases + latestSubPurchases
         val purchaseState = PurchaseState(
             isAdFree = hasPurchased(allPurchases, Products.REMOVE_ADS),
-            hasTranslation = hasPurchased(allPurchases, Products.UNLOCK_TRANSLATION),
         )
 
         val isPurchased = !purchaseState.shouldShowAds
@@ -236,11 +232,9 @@ class BillingManager @Inject constructor(
 
     object Products {
         const val REMOVE_ADS = "remove_ads"
-        const val UNLOCK_TRANSLATION = "unlock_translation"
     }
 
     companion object {
         const val PRODUCT_ID_REMOVE_ADS = Products.REMOVE_ADS
-        const val PRODUCT_ID_UNLOCK_TRANSLATION = Products.UNLOCK_TRANSLATION
     }
 }

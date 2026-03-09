@@ -3,4 +3,7 @@
     <cache-path
         name="quickmemo_cache"
         path="quickmemo_images/" />
+    <files-path
+        name="debug_logs"
+        path="." />
 </paths>

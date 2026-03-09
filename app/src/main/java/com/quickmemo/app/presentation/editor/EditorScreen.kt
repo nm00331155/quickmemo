@@ -35,7 +35,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -78,6 +77,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -98,11 +98,16 @@ import com.quickmemo.app.domain.model.decodeMemoBlocks
 import com.quickmemo.app.domain.model.encodeMemoBlocks
 import com.quickmemo.app.domain.model.memoBlocksToPlainText
 import com.quickmemo.app.domain.model.plainTextToHtml
+import com.quickmemo.app.ocr.OcrCropActivity
+import com.quickmemo.app.ocr.OcrFormattedText
+import com.quickmemo.app.ocr.OcrTextFormatter
+import com.quickmemo.app.ocr.OcrTextNormalizationMode
 import com.quickmemo.app.ocr.OcrProcessor
 import com.quickmemo.app.ocr.OcrResult
 import com.quickmemo.app.translation.TranslationManager
 import com.quickmemo.app.translation.TranslationResult
 import com.quickmemo.app.util.DateTimeUtils
+import com.quickmemo.app.util.EditorDebugLog
 import com.quickmemo.app.util.memoCardBackgroundColor
 import java.io.File
 import java.math.BigDecimal
@@ -157,13 +162,14 @@ fun EditorScreen(
     var showOcrSourceSheet by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var isOcrLoading by remember { mutableStateOf(false) }
-    var ocrResultText by remember { mutableStateOf("") }
+    var ocrFormattedText by remember { mutableStateOf<OcrFormattedText?>(null) }
+    var ocrDraftMode by remember { mutableStateOf(OcrTextNormalizationMode.Normalized) }
+    var ocrDraftText by remember { mutableStateOf("") }
     var showOcrResultDialog by remember { mutableStateOf(false) }
 
     var isTranslationLoading by remember { mutableStateOf(false) }
     var translationResult by remember { mutableStateOf<TranslationResult?>(null) }
     var showTranslationResultDialog by remember { mutableStateOf(false) }
-    var showTranslationPurchaseDialog by remember { mutableStateOf(false) }
 
     var showTtsDialog by remember { mutableStateOf(false) }
     var ttsSpeechRate by remember { mutableStateOf(1.0f) }
@@ -298,6 +304,70 @@ fun EditorScreen(
         targetState.addTextAfterSelection(text)
     }
 
+    fun openOcrDraft(text: String) {
+        val formatted = OcrTextFormatter.formatAll(text)
+        ocrFormattedText = formatted
+        ocrDraftMode = OcrTextNormalizationMode.Normalized
+        ocrDraftText = formatted.normalized
+        showOcrResultDialog = true
+    }
+
+    fun logEditorEvent(message: String, throwable: Throwable? = null) {
+        EditorDebugLog.log(
+            context = context,
+            category = "Editor/Persist",
+            message = message,
+            throwable = throwable,
+        )
+    }
+
+    fun syncCurrentBlocksFromStates(reason: String, logIfChanged: Boolean = false): Boolean {
+        if (isApplyingSnapshot) return false
+
+        var changed = false
+        val updatedBlocks = memoBlocks.map { block ->
+            when (block) {
+                is MemoBlock.RichTextBlock -> {
+                    val latestHtml = richTextStates[block.id]?.toHtml() ?: block.html
+                    if (latestHtml != block.html) {
+                        changed = true
+                        block.copy(html = latestHtml)
+                    } else {
+                        block
+                    }
+                }
+
+                is MemoBlock.TableBlock -> block
+            }
+        }
+
+        if (!changed) return false
+
+        memoBlocks = updatedBlocks
+        currentPlainText = memoBlocksToPlainText(updatedBlocks)
+        undoSnapshotRaw = encodeMemoBlocks(updatedBlocks)
+        if (logIfChanged) {
+            logEditorEvent("block sync reason=$reason blocks=${updatedBlocks.size}")
+        }
+        return true
+    }
+
+    fun moveCursor(delta: Int) {
+        val state = activeRichTextState() ?: return
+        val length = state.annotatedString.text.length
+        val target = (state.selection.end + delta).coerceIn(0, length)
+        state.selection = TextRange(target)
+    }
+
+    fun adjustSelection(delta: Int) {
+        val state = activeRichTextState() ?: return
+        val length = state.annotatedString.text.length
+        val selection = state.selection
+        val start = selection.start.coerceIn(0, length)
+        val nextEnd = (selection.end + delta).coerceIn(start, length)
+        state.selection = TextRange(start, nextEnd)
+    }
+
     fun openAddDictionaryDialog() {
         dictionaryEditTarget = null
         dictionaryLabelInput = ""
@@ -397,6 +467,7 @@ fun EditorScreen(
             viewModel.setUndoRedoRestoring(false)
             return
         }
+        logEditorEvent("undo memoId=${uiState.memoId}")
         applyUndoRedoSnapshot(snapshot)
     }
 
@@ -407,6 +478,7 @@ fun EditorScreen(
             viewModel.setUndoRedoRestoring(false)
             return
         }
+        logEditorEvent("redo memoId=${uiState.memoId}")
         applyUndoRedoSnapshot(snapshot)
     }
 
@@ -471,11 +543,6 @@ fun EditorScreen(
     }
 
     fun runTranslationFlow(sourceText: String, insertImmediately: Boolean) {
-        if (!uiState.hasTranslation) {
-            showTranslationPurchaseDialog = true
-            return
-        }
-
         val targetText = sourceText.trim()
         if (targetText.isBlank()) {
             scope.launch {
@@ -518,12 +585,21 @@ fun EditorScreen(
                     if (recognizedText.isBlank()) {
                         showInfoMessage("テキストを認識できませんでした")
                     } else {
-                        ocrResultText = recognizedText
-                        showOcrResultDialog = true
+                        openOcrDraft(recognizedText)
+                        EditorDebugLog.log(
+                            context = context,
+                            category = "Editor/OCR",
+                            message = "ocr success length=${recognizedText.length}",
+                        )
                     }
                 }
 
                 is OcrResult.Error -> {
+                    EditorDebugLog.log(
+                        context = context,
+                        category = "Editor/OCR",
+                        message = "ocr failed",
+                    )
                     showInfoMessage(result.message)
                 }
             }
@@ -531,18 +607,31 @@ fun EditorScreen(
         }
     }
 
-    suspend fun persistCurrentMemo() {
+    suspend fun persistCurrentMemo(reason: String) {
+        syncCurrentBlocksFromStates(reason = reason)
         val blocksToSave = resolveCurrentBlocks()
         val mergedHtml = blocksToSave
             .filterIsInstance<MemoBlock.RichTextBlock>()
             .joinToString(separator = "\n") { it.html }
             .trim()
 
-        viewModel.saveMemo(
-            contentHtml = mergedHtml,
-            contentPlainText = memoBlocksToPlainText(blocksToSave),
-            blocks = blocksToSave,
-        )
+        runCatching {
+            viewModel.saveMemo(
+                contentHtml = mergedHtml,
+                contentPlainText = memoBlocksToPlainText(blocksToSave),
+                blocks = blocksToSave,
+            )
+        }.onSuccess { savedId ->
+            val resolvedMemoId = savedId ?: uiState.memoId
+            logEditorEvent(
+                message = "persist reason=$reason memoId=$resolvedMemoId blocks=${blocksToSave.size} plain=${memoBlocksToPlainText(blocksToSave).length}",
+            )
+        }.onFailure { throwable ->
+            logEditorEvent(
+                message = "persist failed reason=$reason memoId=${uiState.memoId}",
+                throwable = throwable,
+            )
+        }
     }
 
     val requestCameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -557,11 +646,22 @@ fun EditorScreen(
         }
     }
 
+    val cropImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val resultUri = result.data?.getStringExtra(OcrCropActivity.EXTRA_RESULT_URI)?.let(Uri::parse)
+        if (result.resultCode == Activity.RESULT_OK && resultUri != null) {
+            processOcrUri(resultUri)
+        }
+    }
+
     val takePictureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture(),
     ) { success ->
         if (success) {
-            pendingCameraUri?.let(::processOcrUri)
+            pendingCameraUri?.let { sourceUri ->
+                cropImageLauncher.launch(OcrCropActivity.createIntent(context, sourceUri))
+            }
         } else {
             scope.launch {
                 showInfoMessage("撮影をキャンセルしました")
@@ -573,7 +673,7 @@ fun EditorScreen(
         contract = ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri != null) {
-            processOcrUri(uri)
+            cropImageLauncher.launch(OcrCropActivity.createIntent(context, uri))
         }
     }
 
@@ -607,6 +707,7 @@ fun EditorScreen(
         val initialSnapshot = encodeMemoBlocks(initialBlocks)
         undoSnapshotRaw = initialSnapshot
         viewModel.initializeUndoRedo(initialSnapshot)
+        logEditorEvent("load memoId=${uiState.memoId} blocks=${initialBlocks.size}")
 
         delay(120)
         isApplyingSnapshot = false
@@ -632,9 +733,10 @@ fun EditorScreen(
             }
     }
 
-    LaunchedEffect(uiState.hasTranslation) {
-        if (uiState.hasTranslation) {
-            showTranslationPurchaseDialog = false
+    LaunchedEffect(loadedSignature) {
+        while (loadedSignature.isNotBlank()) {
+            delay(3_000)
+            syncCurrentBlocksFromStates(reason = "poll", logIfChanged = true)
         }
     }
 
@@ -664,48 +766,65 @@ fun EditorScreen(
 
     BackHandler {
         scope.launch {
-            persistCurrentMemo()
+            logEditorEvent("back pressed memoId=${uiState.memoId}")
+            persistCurrentMemo(reason = "back_handler")
             onNavigateBack()
         }
     }
 
-    DisposableEffect(context) {
-        val engine = TextToSpeech(context.applicationContext) { status ->
-            mainThreadHandler.post {
-                ttsInitStatus = status
-            }
-        }
-        engine.setOnUtteranceProgressListener(
-            object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    mainThreadHandler.post { isSpeaking = true }
-                }
-
-                override fun onDone(utteranceId: String?) {
-                    mainThreadHandler.post { isSpeaking = false }
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun onError(utteranceId: String?) {
-                    mainThreadHandler.post { isSpeaking = false }
-                }
-
-                override fun onError(utteranceId: String?, errorCode: Int) {
-                    mainThreadHandler.post { isSpeaking = false }
-                }
-            },
-        )
-        ttsEngine = engine
-
-        onDispose {
-            runCatching {
-                engine.stop()
-                engine.shutdown()
-            }
-            ttsEngine = null
+    LaunchedEffect(uiState.ttsEnabled) {
+        if (!uiState.ttsEnabled) {
+            stopTtsReading()
+            showTtsDialog = false
             ttsReady = false
             ttsInitStatus = null
-            isSpeaking = false
+            ttsErrorMessage = null
+        }
+    }
+
+    DisposableEffect(context, uiState.ttsEnabled) {
+        if (!uiState.ttsEnabled) {
+            ttsEngine = null
+            onDispose {
+            }
+        } else {
+            val engine = TextToSpeech(context.applicationContext) { status ->
+                mainThreadHandler.post {
+                    ttsInitStatus = status
+                }
+            }
+            engine.setOnUtteranceProgressListener(
+                object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        mainThreadHandler.post { isSpeaking = true }
+                    }
+
+                    override fun onDone(utteranceId: String?) {
+                        mainThreadHandler.post { isSpeaking = false }
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        mainThreadHandler.post { isSpeaking = false }
+                    }
+
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        mainThreadHandler.post { isSpeaking = false }
+                    }
+                },
+            )
+            ttsEngine = engine
+
+            onDispose {
+                runCatching {
+                    engine.stop()
+                    engine.shutdown()
+                }
+                ttsEngine = null
+                ttsReady = false
+                ttsInitStatus = null
+                isSpeaking = false
+            }
         }
     }
 
@@ -713,7 +832,8 @@ fun EditorScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 scope.launch {
-                    persistCurrentMemo()
+                    logEditorEvent("lifecycle onStop memoId=${uiState.memoId}")
+                    persistCurrentMemo(reason = "lifecycle_on_stop")
                 }
             }
         }
@@ -745,7 +865,8 @@ fun EditorScreen(
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    persistCurrentMemo()
+                                    logEditorEvent("back icon memoId=${uiState.memoId}")
+                                    persistCurrentMemo(reason = "top_bar_back")
                                     onNavigateBack()
                                 }
                             },
@@ -764,13 +885,6 @@ fun EditorScreen(
                                     contentDescription = "share",
                                 )
                             }
-                        }
-
-                        IconButton(onClick = { showTtsDialog = true }) {
-                            Icon(
-                                imageVector = Icons.Default.VolumeUp,
-                                contentDescription = "tts",
-                            )
                         }
 
                         IconButton(onClick = onOpenTodo) {
@@ -806,9 +920,6 @@ fun EditorScreen(
                             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                         }
                     },
-                    onOpenCalculator = {
-                        showCalculatorSheet = true
-                    },
                     onOpenDictionary = {
                         showDictionarySheet = true
                     },
@@ -834,13 +945,20 @@ fun EditorScreen(
                             appendTextToEditor(String.format("%02d:%02d", hour, minute))
                         }
                     },
+                    onOpenTts = {
+                        showTtsDialog = true
+                    },
+                    onOpenCalculator = {
+                        showCalculatorSheet = true
+                    },
                     showFullCopy = uiState.memoToolbarSettings.fullCopy,
                     showUndoRedo = uiState.memoToolbarSettings.undoRedo,
                     showOcr = uiState.memoToolbarSettings.ocr,
-                    showCalculator = uiState.memoToolbarSettings.calculator,
                     showDictionary = true,
                     showTranslation = uiState.memoToolbarSettings.translation,
                     showDateTimeInsert = uiState.memoToolbarSettings.dateTimeInsert,
+                    showTts = uiState.ttsEnabled,
+                    showCalculator = uiState.memoToolbarSettings.calculator,
                     canUndo = uiState.canUndo,
                     canRedo = uiState.canRedo,
                     modifier = Modifier
@@ -887,6 +1005,28 @@ fun EditorScreen(
                     showTextColor = uiState.memoToolbarSettings.textColor,
                     showHighlighter = uiState.memoToolbarSettings.highlighter,
                 )
+
+                if (activeRichTextState() != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { moveCursor(-1) }) {
+                            Text("←")
+                        }
+                        TextButton(onClick = { moveCursor(1) }) {
+                            Text("→")
+                        }
+                        TextButton(onClick = { adjustSelection(-1) }) {
+                            Text("選択-")
+                        }
+                        TextButton(onClick = { adjustSelection(1) }) {
+                            Text("選択+")
+                        }
+                    }
+                }
 
                 if (selectedTextForDictionary.isNotBlank()) {
                     Row(
@@ -945,28 +1085,10 @@ fun EditorScreen(
                                 }
 
                                 LaunchedEffect(block.id, state, loadedSignature) {
-                                    snapshotFlow { state.toHtml() }
-                                        .collect { html ->
+                                    snapshotFlow { state.annotatedString.text }
+                                        .collect {
                                             if (isApplyingSnapshot) return@collect
-
-                                            val currentBlock = memoBlocks
-                                                .firstOrNull {
-                                                    it is MemoBlock.RichTextBlock && it.id == block.id
-                                                } as? MemoBlock.RichTextBlock ?: return@collect
-
-                                            if (currentBlock.html == html) return@collect
-
-                                            val updated = memoBlocks.map { existing ->
-                                                if (existing is MemoBlock.RichTextBlock && existing.id == block.id) {
-                                                    existing.copy(html = html)
-                                                } else {
-                                                    existing
-                                                }
-                                            }
-
-                                            memoBlocks = updated
-                                            currentPlainText = memoBlocksToPlainText(updated)
-                                            undoSnapshotRaw = encodeMemoBlocks(updated)
+                                            syncCurrentBlocksFromStates(reason = "text_change")
                                         }
                                 }
 
@@ -1164,35 +1286,6 @@ fun EditorScreen(
         )
     }
 
-    if (showTranslationPurchaseDialog) {
-        AlertDialog(
-            onDismissRequest = { showTranslationPurchaseDialog = false },
-            title = { Text("翻訳機能の解放") },
-            text = { Text("翻訳機能は購入後に利用できます。今すぐ購入しますか？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (activity == null) {
-                            scope.launch {
-                                showInfoMessage("購入画面を開けませんでした")
-                            }
-                            return@TextButton
-                        }
-                        viewModel.purchaseTranslation(activity)
-                        showTranslationPurchaseDialog = false
-                    },
-                ) {
-                    Text("購入する")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTranslationPurchaseDialog = false }) {
-                    Text("閉じる")
-                }
-            },
-        )
-    }
-
     if (showTtsDialog) {
         AlertDialog(
             onDismissRequest = { showTtsDialog = false },
@@ -1278,23 +1371,50 @@ fun EditorScreen(
     }
 
     if (showOcrResultDialog) {
+        val formatted = ocrFormattedText
         AlertDialog(
-            onDismissRequest = { showOcrResultDialog = false },
+            onDismissRequest = {
+                showOcrResultDialog = false
+                ocrFormattedText = null
+            },
             title = { Text("OCR結果") },
             text = {
-                OutlinedTextField(
-                    value = ocrResultText,
-                    onValueChange = { ocrResultText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 5,
-                    maxLines = 12,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        listOf(
+                            OcrTextNormalizationMode.Raw to "Raw",
+                            OcrTextNormalizationMode.Normalized to "整形",
+                            OcrTextNormalizationMode.Bulletized to "箇条書き",
+                        ).forEach { (mode, label) ->
+                            TextButton(
+                                onClick = {
+                                    ocrDraftMode = mode
+                                    ocrDraftText = formatted?.textFor(mode).orEmpty()
+                                },
+                            ) {
+                                Text(if (ocrDraftMode == mode) "[$label]" else label)
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = ocrDraftText,
+                        onValueChange = { ocrDraftText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 6,
+                        maxLines = 14,
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        appendTextToEditor(ocrResultText)
+                        appendTextToEditor(ocrDraftText)
                         showOcrResultDialog = false
+                        ocrFormattedText = null
                     },
                 ) {
                     Text("挿入")
@@ -1304,21 +1424,23 @@ fun EditorScreen(
                 Row {
                     TextButton(
                         onClick = {
-                            if (!uiState.hasTranslation) {
-                                showTranslationPurchaseDialog = true
-                                return@TextButton
-                            }
                             runTranslationFlow(
-                                sourceText = ocrResultText,
+                                sourceText = ocrDraftText,
                                 insertImmediately = true,
                             )
                             showOcrResultDialog = false
+                            ocrFormattedText = null
                         },
                     ) {
                         Text("翻訳して挿入")
                     }
 
-                    TextButton(onClick = { showOcrResultDialog = false }) {
+                    TextButton(
+                        onClick = {
+                            showOcrResultDialog = false
+                            ocrFormattedText = null
+                        },
+                    ) {
                         Text("キャンセル")
                     }
                 }

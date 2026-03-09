@@ -6,7 +6,7 @@ import androidx.core.net.toUri
 import com.quickmemo.app.data.local.dao.MemoDao
 import com.quickmemo.app.domain.model.Memo
 import com.quickmemo.app.domain.repository.MemoRepository
-import com.quickmemo.app.widget.WidgetUpdateDispatcher
+import com.quickmemo.app.widget.WidgetRefreshCoordinator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -19,6 +19,7 @@ import javax.inject.Singleton
 @Singleton
 class MemoRepositoryImpl @Inject constructor(
     private val memoDao: MemoDao,
+    private val widgetRefreshCoordinator: WidgetRefreshCoordinator,
     @ApplicationContext private val context: Context,
 ) : MemoRepository {
 
@@ -64,9 +65,7 @@ class MemoRepositoryImpl @Inject constructor(
             )
             memo.id
         }
-        runCatching {
-            WidgetUpdateDispatcher.updateMemoWidgets(context)
-        }
+        widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_save")
         return savedId
     }
 
@@ -81,34 +80,26 @@ class MemoRepositoryImpl @Inject constructor(
     override suspend fun moveToTrash(id: Long) {
         val now = System.currentTimeMillis()
         memoDao.moveToTrash(id, now, now)
-        runCatching {
-            WidgetUpdateDispatcher.updateMemoWidgets(context)
-        }
+        widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_move_to_trash")
     }
 
     override suspend fun restoreFromTrash(id: Long) {
         memoDao.restoreFromTrash(id, System.currentTimeMillis())
-        runCatching {
-            WidgetUpdateDispatcher.updateMemoWidgets(context)
-        }
+        widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_restore_from_trash")
     }
 
     override suspend fun deletePermanently(id: Long) {
         val memo = memoDao.getMemoById(id)
         memoDao.deleteMemoById(id)
         memo?.let { deleteImagesFromHtml(it.contentHtml) }
-        runCatching {
-            WidgetUpdateDispatcher.updateMemoWidgets(context)
-        }
+        widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_delete_permanently")
     }
 
     override suspend fun emptyTrash() {
         val deleted = memoDao.getAllDeletedMemos()
         memoDao.deleteAllDeletedMemos()
         deleted.forEach { deleteImagesFromHtml(it.contentHtml) }
-        runCatching {
-            WidgetUpdateDispatcher.updateMemoWidgets(context)
-        }
+        widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_empty_trash")
     }
 
     override suspend fun purgeExpiredTrash(days: Long): Int {
@@ -116,6 +107,9 @@ class MemoRepositoryImpl @Inject constructor(
         val expired = memoDao.getExpiredDeletedMemos(threshold)
         val deletedCount = memoDao.deleteExpiredDeletedMemos(threshold)
         expired.forEach { deleteImagesFromHtml(it.contentHtml) }
+        if (deletedCount > 0) {
+            widgetRefreshCoordinator.refreshMemoWidgets(reason = "memo_purge_expired")
+        }
         return deletedCount
     }
 

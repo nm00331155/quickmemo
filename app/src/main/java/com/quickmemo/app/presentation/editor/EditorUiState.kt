@@ -18,7 +18,7 @@ data class EditorUiState(
     val showCharacterCount: Boolean = true,
     val insertCurrentTimeWithDate: Boolean = false,
     val memoToolbarSettings: MemoToolbarSettings = MemoToolbarSettings(),
-    val hasTranslation: Boolean = false,
+    val ttsEnabled: Boolean = false,
     val taxRate: Double = 10.0,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,

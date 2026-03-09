@@ -13,6 +13,7 @@ import dagger.hilt.components.SingletonComponent
 interface WidgetEntryPoint {
     fun memoRepository(): MemoRepository
     fun todoRepository(): TodoRepository
+    fun widgetRefreshCoordinator(): WidgetRefreshCoordinator
 }
 
 internal fun widgetEntryPoint(context: Context): WidgetEntryPoint {
@@ -20,4 +21,8 @@ internal fun widgetEntryPoint(context: Context): WidgetEntryPoint {
         context.applicationContext,
         WidgetEntryPoint::class.java,
     )
+}
+
+internal fun widgetRefreshCoordinator(context: Context): WidgetRefreshCoordinator {
+    return widgetEntryPoint(context).widgetRefreshCoordinator()
 }

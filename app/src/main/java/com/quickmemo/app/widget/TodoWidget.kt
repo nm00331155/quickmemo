@@ -160,7 +160,6 @@ class ToggleTodoAction : ActionCallback {
         val itemId = parameters[TodoWidget.ITEM_ID_KEY] ?: return
         val currentChecked = parameters[TodoWidget.ITEM_CHECKED_KEY] ?: false
         widgetEntryPoint(context).todoRepository().updateChecked(itemId, !currentChecked)
-        WidgetUpdateDispatcher.updateTodoWidgets(context)
     }
 }
 

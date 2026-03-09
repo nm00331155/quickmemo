@@ -4,7 +4,6 @@ import com.android.billingclient.api.ProductDetails
 
 data class PurchaseState(
     val isAdFree: Boolean = false,
-    val hasTranslation: Boolean = false,
 ) {
     val shouldShowAds: Boolean
         get() = !isAdFree

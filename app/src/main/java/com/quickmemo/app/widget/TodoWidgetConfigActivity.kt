@@ -40,6 +40,9 @@ class TodoWidgetConfigActivity : ComponentActivity() {
     @Inject
     lateinit var todoRepository: TodoRepository
 
+    @Inject
+    lateinit var widgetRefreshCoordinator: WidgetRefreshCoordinator
+
     private var appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,7 +71,7 @@ class TodoWidgetConfigActivity : ComponentActivity() {
     private fun onConfirm(tabId: Int) {
         WidgetConfigStore.saveTodoTabId(this, appWidgetId, tabId)
         lifecycleScope.launch {
-            WidgetUpdateDispatcher.updateTodoWidgets(this@TodoWidgetConfigActivity)
+            widgetRefreshCoordinator.refreshTodoWidgets(reason = "todo_widget_config")
             setResult(
                 RESULT_OK,
                 Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
